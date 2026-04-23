@@ -378,7 +378,7 @@ export function App() {
 
   useEffect(() => {
     if (!isLoggedIn && authRequiredViews.has(view)) {
-      setView("home");
+      setView(view === "booking" ? "login" : "home");
     }
   }, [isLoggedIn, view]);
 
@@ -395,8 +395,8 @@ export function App() {
         setIsLoggedIn(Boolean(data.session));
         if (data.session) {
           await loadUserRole();
-        } else if (protectedViews.has(view)) {
-          setView("home");
+        } else if (protectedViews.has(view) || view === "booking") {
+          setView(view === "booking" ? "login" : "home");
         }
       }
     });
@@ -415,7 +415,7 @@ export function App() {
       } else {
         setUserRole("customer");
         if (event === "SIGNED_OUT" || authRequiredViews.has(view)) {
-          setView("home");
+          setView(view === "booking" ? "login" : "home");
         }
       }
     });
@@ -503,7 +503,7 @@ export function App() {
       <AppHeader activeView={view} isLoggedIn={isLoggedIn} onDashboardClick={handleDashboardClick} onSignOut={handleSignOut} setView={setView} />
       {view === "home" ? <HomeScreen onTripSearch={setTripFilters} onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
       {view === "trips" ? <TripsScreen initialFilters={tripFilters} onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
-      {view === "tripDetail" ? <TripDetailScreen trip={selectedTrip} setView={setView} /> : null}
+      {view === "tripDetail" ? <TripDetailScreen trip={selectedTrip} isLoggedIn={isLoggedIn} setView={setView} /> : null}
       {view === "booking" ? <BookingScreen trip={selectedTrip} setView={setView} /> : null}
       {view === "cities" ? <CitiesScreen setView={setView} setSelectedCity={setSelectedCity} /> : null}
       {view === "cityDetail" ? <CityDetailScreen city={selectedCity} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}

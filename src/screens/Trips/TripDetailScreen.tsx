@@ -9,7 +9,7 @@ import "./TripDetailScreen.css";
 
 const detailTabs = ["Overview", "Full Itinerary", "Tour Details"];
 
-export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView: (view: View) => void }) {
+export function TripDetailScreen({ trip, isLoggedIn, setView }: { trip: Trip | null; isLoggedIn: boolean; setView: (view: View) => void }) {
   const [activeTab, setActiveTab] = useState("Overview");
   const { formatTripMoney, priceNotice } = useCurrency();
 
@@ -143,7 +143,7 @@ export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView
                 ))}
               </select>
             </label>
-            <button type="button" disabled={soldOut} onClick={() => setView("booking")}>{soldOut ? "Sold Out" : "Book Now"}</button>
+            <button type="button" disabled={soldOut} onClick={() => setView(isLoggedIn ? "booking" : "login")}>{soldOut ? "Sold Out" : "Book Now"}</button>
             <p>{priceNotice}</p>
           </section>
 
