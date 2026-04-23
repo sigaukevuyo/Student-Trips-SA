@@ -147,7 +147,10 @@ export function TripCard({
             <Users size={15} />
             {trip.seatsRemaining} seats left
           </span>
-          <strong>From {formatTripMoney(trip.price)}</strong>
+          <strong className="trip-price-stack">
+            {trip.originalPrice && trip.originalPrice > trip.price ? <span>{formatTripMoney(trip.originalPrice)}</span> : null}
+            <em>From {formatTripMoney(trip.price)}</em>
+          </strong>
           <strong>Deposit {formatTripMoney(trip.deposit)}</strong>
         </div>
         <div className="trip-card-actions">

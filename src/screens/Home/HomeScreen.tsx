@@ -23,7 +23,9 @@ type Review = {
 
 type HomeUpdate = {
   id: string;
+  title: string;
   body: string;
+  banner_special_collection_slug: string | null;
 };
 
 const values = [
@@ -37,7 +39,7 @@ function Stars({ rating }: { rating: number }) {
   return (
     <div className="home-stars" aria-label={`${rating} star review`}>
       {Array.from({ length: 5 }).map((_, index) => (
-        <Star key={index} size={13} className={index >= rating ? "faded" : ""} />
+        <Star key={index} size={13} fill="currentColor" className={index >= rating ? "faded" : ""} />
       ))}
     </div>
   );
@@ -79,7 +81,7 @@ export function HomeScreen({
         supabase.from("cities").select("id,slug,name,province,image_url,tagline,support_email,support_phone,trips(count)").eq("active", true).order("name").limit(6),
         supabase.from("trips").select(tripSelect).eq("published", true).order("created_at", { ascending: false }).limit(3),
         supabase.from("reviews").select("id,quote,author_name,rating").eq("published", true).order("created_at", { ascending: false }).limit(6),
-        supabase.from("updates").select("id,body").eq("published", true).order("published_on", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("updates").select("id,title,body,banner_special_collection_slug").eq("published", true).order("published_on", { ascending: false }).limit(1).maybeSingle(),
       ]);
 
       if (!mounted) return;
@@ -111,10 +113,26 @@ export function HomeScreen({
     setView("trips");
   }
 
+  function openSpecialTrips() {
+    if (!latestUpdate?.banner_special_collection_slug) return;
+
+    onTripSearch({
+      specialCollection: latestUpdate.banner_special_collection_slug,
+      label: latestUpdate.title.trim() || "Special trips",
+    });
+    setView("trips");
+  }
+
   return (
     <>
       {latestUpdate?.body ? (
-        <div className="home-announcement" aria-label="Latest update">
+        <button
+          className="home-announcement"
+          type="button"
+          aria-label={latestUpdate.banner_special_collection_slug ? `Open ${latestUpdate.title || "special"} trips` : "Latest update"}
+          onClick={openSpecialTrips}
+          disabled={!latestUpdate.banner_special_collection_slug}
+        >
           <div className="home-announcement-track">
             {Array.from({ length: 8 }).map((_, index) => (
               <span key={index} aria-hidden={index > 0}>
@@ -122,7 +140,7 @@ export function HomeScreen({
               </span>
             ))}
           </div>
-        </div>
+        </button>
       ) : null}
 
       <section className="home-hero">
@@ -220,7 +238,10 @@ export function HomeScreen({
                 <div className="home-trip-facts">
                   <span>{formatDate(trip.startDate)}</span>
                   <span>{trip.seatsRemaining} seats left</span>
-                  <strong>From {formatTripMoney(trip.price)}</strong>
+                  <strong className="home-trip-price-stack">
+                    {trip.originalPrice && trip.originalPrice > trip.price ? <span>{formatTripMoney(trip.originalPrice)}</span> : null}
+                    <em>From {formatTripMoney(trip.price)}</em>
+                  </strong>
                   <strong>Deposit {formatTripMoney(trip.deposit)}</strong>
                 </div>
                 <p className="home-trip-currency">{priceNotice}</p>
@@ -289,7 +310,7 @@ export function HomeScreen({
       </section>
 
       <section className="home-section container">
-        <div className="home-row-title"><h2 className="font-display">Student Reviews</h2></div>
+        <div className="home-row-title"><h2 className="font-display">Customer Reviews</h2></div>
         {reviews.length === 0 && !loading ? <div className="app-empty-state"><h2>Student stories coming soon</h2><p>Reviews from recent travelers will be shared here once available.</p></div> : null}
         <div className="home-review-grid">
           {reviews.map((review) => (

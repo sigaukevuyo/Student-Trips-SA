@@ -193,6 +193,7 @@
 }
 
 .branch-modal-grid input,
+.branch-modal-grid select,
 .branch-modal-grid textarea {
   width: 100%;
   min-height: 42px;
@@ -218,6 +219,16 @@
 
 .branch-modal-full {
   grid-column: 1 / -1;
+}
+
+.branch-check {
+  align-content: start;
+}
+
+.branch-check input {
+  width: 18px;
+  min-height: 18px;
+  padding: 0;
 }
 
 .branch-modal-actions {

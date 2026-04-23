@@ -1,7 +1,8 @@
 import type { Trip } from "./types";
 
-export function getTripBadges(trip: Pick<Trip, "featured" | "tags">) {
+export function getTripBadges(trip: Pick<Trip, "featured" | "tags" | "isSpecial">) {
   const labels = [
+    ...(trip.isSpecial ? ["Special"] : []),
     ...(trip.featured ? ["Featured"] : []),
     ...trip.tags,
   ];

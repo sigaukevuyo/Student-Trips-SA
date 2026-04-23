@@ -141,12 +141,7 @@ export function SiteFooter({
           <div className="footer-bottom">
             <div>
               <p>(c) 2026 Student Trips SA. All rights reserved.</p>
-              <p className="footer-credit-line">
-                Designed by{" "}
-                <a className="footer-credit-link" href="https://hadiniholdings.co.za" target="_blank" rel="noreferrer">
-                  Hadini Holdings
-                </a>
-              </p>
+              <p className="footer-brand-note">Student Trips SA is proudly part of The Yebogo SA (Pty) Ltd portfolio of brands.</p>
             </div>
 
             <div className="footer-bottom-right">
@@ -167,7 +162,12 @@ export function SiteFooter({
                   Waiver Policy
                 </button>
               </nav>
-              <p className="footer-brand-note">Student Trips SA is proudly part of The Yebogo SA (Pty) Ltd portfolio of brands</p>
+              <p className="footer-credit-line">
+                Designed by{" "}
+                <a className="footer-credit-link" href="https://hadiniholdings.co.za" target="_blank" rel="noreferrer">
+                  Hadini Holdings
+                </a>
+              </p>
             </div>
           </div>
         </div>

@@ -226,7 +226,7 @@ export function CustomerScreen({
   const activeBookings = useMemo(() => bookings.filter((booking) => activeBookingStatuses.has(booking.status)), [bookings]);
   const profilePercent = profile?.profile_complete_percent ?? 0;
   const displayName = profile?.first_name || profile?.email?.split("@")[0] || "traveler";
-  const dashboardTrips = savedTrips.length > 0 ? savedTrips : recommendedTrips;
+  const dashboardTrips = recommendedTrips;
   const paymentBookings = bookings.filter((booking) => booking.outstanding > 0 && payableStatuses.has(booking.status));
   const nextBooking = activeBookings[0] ?? null;
   const profileItems = [
@@ -472,8 +472,8 @@ export function CustomerScreen({
                 <section>
                   <div className="section-head">
                     <div>
-                      <span className="section-kicker">{savedTrips.length > 0 ? "Saved trips" : "Recommended trips"}</span>
-                      <h2>{savedTrips.length > 0 ? "Your favourites" : "Trips to start with"}</h2>
+                      <span className="section-kicker">Suggested trips</span>
+                      <h2>Trips to start with</h2>
                     </div>
                   </div>
                   {dashboardTrips.length > 0 ? (

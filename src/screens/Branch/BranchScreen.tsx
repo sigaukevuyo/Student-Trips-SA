@@ -110,9 +110,12 @@ export function BranchScreen() {
     start_date: "",
     duration: "",
     price: "",
+    original_price: "",
     deposit: "",
     capacity: "",
     seats_remaining: "",
+    is_special: false,
+    special_collection_slug: "",
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -258,9 +261,12 @@ export function BranchScreen() {
       start_date: "",
       duration: "",
       price: "",
+      original_price: "",
       deposit: "",
       capacity: "",
       seats_remaining: "",
+      is_special: false,
+      special_collection_slug: "",
     });
   }
 
@@ -275,9 +281,11 @@ export function BranchScreen() {
     const title = tripForm.title.trim();
     const slug = (tripForm.slug.trim() || slugify(title)).trim();
     const priceCents = Math.round(Number(tripForm.price) * 100);
+    const originalPriceCents = tripForm.original_price ? Math.round(Number(tripForm.original_price) * 100) : null;
     const depositCents = Math.round(Number(tripForm.deposit || "0") * 100);
     const capacity = Number.parseInt(tripForm.capacity, 10);
     const seatsRemaining = Number.parseInt(tripForm.seats_remaining || tripForm.capacity, 10);
+    const specialCollectionSlug = tripForm.is_special ? (tripForm.special_collection_slug.trim() || slugify(title)) : null;
 
     if (!title || !slug || !tripForm.category.trim() || !tripForm.start_date) {
       setError("Trip title, slug, category, and start date are required.");
@@ -286,6 +294,11 @@ export function BranchScreen() {
 
     if (!Number.isFinite(priceCents) || priceCents < 0 || !Number.isFinite(capacity) || capacity <= 0 || !Number.isFinite(seatsRemaining) || seatsRemaining < 0) {
       setError("Trip price, capacity, and seats must be valid numbers.");
+      return;
+    }
+
+    if (originalPriceCents !== null && (!Number.isFinite(originalPriceCents) || originalPriceCents < priceCents)) {
+      setError("Original price must be greater than or equal to the current price.");
       return;
     }
 
@@ -301,9 +314,12 @@ export function BranchScreen() {
       start_date: tripForm.start_date,
       duration: tripForm.duration.trim() || null,
       price_cents: priceCents,
+      original_price_cents: originalPriceCents,
       deposit_cents: depositCents,
       capacity,
       seats_remaining: Math.min(seatsRemaining, capacity),
+      is_special: tripForm.is_special,
+      special_collection_slug: specialCollectionSlug,
       status: "OPEN",
       featured: false,
       published: true,
@@ -666,6 +682,10 @@ export function BranchScreen() {
                 <input type="number" min="0" step="0.01" value={tripForm.price} onChange={(event) => setTripFormValue("price", event.target.value)} placeholder="3499" />
               </label>
               <label>
+                Original price
+                <input type="number" min="0" step="0.01" value={tripForm.original_price} onChange={(event) => setTripFormValue("original_price", event.target.value)} placeholder="3999" />
+              </label>
+              <label>
                 Deposit
                 <input type="number" min="0" step="0.01" value={tripForm.deposit} onChange={(event) => setTripFormValue("deposit", event.target.value)} placeholder="499" />
               </label>
@@ -676,6 +696,18 @@ export function BranchScreen() {
               <label>
                 Seats remaining
                 <input type="number" min="0" value={tripForm.seats_remaining} onChange={(event) => setTripFormValue("seats_remaining", event.target.value)} placeholder={tripForm.capacity || "18"} />
+              </label>
+              <label className="branch-check">
+                Special trip
+                <input type="checkbox" checked={tripForm.is_special} onChange={(event) => setTripForm((current) => ({ ...current, is_special: event.target.checked }))} />
+              </label>
+              <label>
+                Special collection
+                <input
+                  value={tripForm.special_collection_slug}
+                  onChange={(event) => setTripFormValue("special_collection_slug", event.target.value)}
+                  placeholder={tripForm.title ? `${slugify(tripForm.title)}-specials` : "winter-specials"}
+                />
               </label>
               <label className="branch-modal-full">
                 Summary

@@ -78,17 +78,11 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         const response = await fetch("https://api.frankfurter.dev/v2/rates?base=ZAR&quotes=USD,EUR,GBP,AUD");
         if (!response.ok) return;
 
-        const data = (await response.json()) as Array<{ quote?: string; rate?: number }>;
-        const nextRates = data.reduce<Record<SupportedCurrency, number>>(
-          (result, item) => {
-            const quote = item.quote as SupportedCurrency | undefined;
-            if (quote && quote in result && typeof item.rate === "number") {
-              result[quote] = item.rate;
-            }
-            return result;
-          },
-          { ...defaultRates },
-        );
+        const data = (await response.json()) as { rates?: Partial<Record<SupportedCurrency, number>> };
+        const nextRates = {
+          ...defaultRates,
+          ...(data.rates ?? {}),
+        };
 
         if (!active) return;
 

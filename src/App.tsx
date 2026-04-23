@@ -18,6 +18,7 @@ import { TripDetailScreen } from "./screens/Trips/TripDetailScreen";
 import { TripsScreen } from "./screens/Trips/TripsScreen";
 import { UpdatesScreen } from "./screens/Updates/UpdatesScreen";
 import { CurrencyProvider } from "./lib/currency";
+import { dbTripToTrip, tripSelect, type DbTrip } from "./lib/db";
 import { supabase } from "./lib/supabase";
 import type { Trip } from "./lib/types";
 import { FloatingChatButton } from "./shared/components/FloatingChatButton";
@@ -36,6 +37,8 @@ export type TripFilters = {
   query?: string;
   city?: string;
   category?: string;
+  specialCollection?: string;
+  label?: string;
 };
 
 const savedViewKey = "student-trips:last-view";
@@ -69,6 +72,88 @@ const persistentViews = new Set<View>([
   "branch",
 ]);
 
+type RouteState = {
+  citySlug: string | null;
+  tripSlug: string | null;
+  view: View;
+};
+
+const staticViewPaths: Partial<Record<View, string>> = {
+  home: "/",
+  trips: "/trips",
+  cities: "/cities",
+  faq: "/faq",
+  updates: "/updates",
+  partner: "/partners",
+  contact: "/contact",
+  login: "/login",
+  register: "/register",
+  onboarding: "/onboarding",
+  resetPassword: "/reset-password",
+  updatePassword: "/update-password",
+  terms: "/terms",
+  privacy: "/privacy",
+  refund: "/refund-policy",
+  accessibility: "/accessibility-statement",
+  waiver: "/waiver-policy",
+  customer: "/dashboard",
+  admin: "/admin",
+  branch: "/branch",
+};
+
+function normalizePathname(pathname: string) {
+  const normalized = pathname.replace(/\/+$/, "");
+  return normalized === "" ? "/" : normalized;
+}
+
+function getRouteFromPathname(pathname: string): RouteState {
+  const normalizedPath = normalizePathname(pathname);
+  const tripBookingMatch = normalizedPath.match(/^\/trips\/([^/]+)\/book$/);
+  if (tripBookingMatch) {
+    return { view: "booking", tripSlug: decodeURIComponent(tripBookingMatch[1]), citySlug: null };
+  }
+
+  const tripDetailMatch = normalizedPath.match(/^\/trips\/([^/]+)$/);
+  if (tripDetailMatch) {
+    return { view: "tripDetail", tripSlug: decodeURIComponent(tripDetailMatch[1]), citySlug: null };
+  }
+
+  const cityDetailMatch = normalizedPath.match(/^\/cities\/([^/]+)$/);
+  if (cityDetailMatch) {
+    return { view: "cityDetail", citySlug: decodeURIComponent(cityDetailMatch[1]), tripSlug: null };
+  }
+
+  const matchedView = (Object.entries(staticViewPaths).find(([, path]) => path === normalizedPath)?.[0] as View | undefined) ?? "home";
+  return { view: matchedView, tripSlug: null, citySlug: null };
+}
+
+function getInitialRoute(): RouteState {
+  try {
+    return getRouteFromPathname(window.location.pathname);
+  } catch {
+    return { view: getSavedView(), tripSlug: null, citySlug: null };
+  }
+}
+
+function getPathForView(view: View, selectedTrip: Trip | null, selectedCity: CityDestination | null, routeTripSlug: string | null, routeCitySlug: string | null) {
+  if (view === "tripDetail") {
+    const tripSlug = selectedTrip?.slug ?? routeTripSlug;
+    return tripSlug ? `/trips/${encodeURIComponent(tripSlug)}` : "/trips";
+  }
+
+  if (view === "booking") {
+    const tripSlug = selectedTrip?.slug ?? routeTripSlug;
+    return tripSlug ? `/trips/${encodeURIComponent(tripSlug)}/book` : "/booking";
+  }
+
+  if (view === "cityDetail") {
+    const citySlug = selectedCity?.slug ?? routeCitySlug;
+    return citySlug ? `/cities/${encodeURIComponent(citySlug)}` : "/cities";
+  }
+
+  return staticViewPaths[view] ?? "/";
+}
+
 function getSavedView(): View {
   try {
     const savedView = window.localStorage.getItem(savedViewKey) as View | null;
@@ -101,7 +186,10 @@ function saveJson<T>(key: string, value: T | null) {
 }
 
 export function App() {
-  const [view, setViewState] = useState<View>(getSavedView);
+  const initialRoute = getInitialRoute();
+  const [view, setViewState] = useState<View>(initialRoute.view);
+  const [routeCitySlug, setRouteCitySlug] = useState<string | null>(initialRoute.citySlug);
+  const [routeTripSlug, setRouteTripSlug] = useState<string | null>(initialRoute.tripSlug);
   const [selectedCity, setSelectedCityState] = useState<CityDestination | null>(() => getSavedJson<CityDestination>(savedCityKey));
   const [selectedTrip, setSelectedTripState] = useState<Trip | null>(() => getSavedJson<Trip>(savedTripKey));
   const [tripFilters, setTripFilters] = useState<TripFilters>({});
@@ -110,9 +198,14 @@ export function App() {
 
   const setView = (nextView: View) => {
     setViewState(nextView);
+    const nextPath = getPathForView(nextView, selectedTrip, selectedCity, routeTripSlug, routeCitySlug);
     try {
       if (persistentViews.has(nextView)) {
         window.localStorage.setItem(savedViewKey, nextView);
+      }
+
+      if (normalizePathname(window.location.pathname) !== nextPath) {
+        window.history.pushState({}, "", nextPath);
       }
     } catch {
       // Ignore storage failures and keep the in-memory navigation working.
@@ -121,11 +214,13 @@ export function App() {
 
   const setSelectedCity = (city: CityDestination | null) => {
     setSelectedCityState(city);
+    setRouteCitySlug(city?.slug ?? null);
     saveJson(savedCityKey, city);
   };
 
   const setSelectedTrip = (trip: Trip | null) => {
     setSelectedTripState(trip);
+    setRouteTripSlug(trip?.slug ?? null);
     saveJson(savedTripKey, trip);
   };
 
@@ -189,14 +284,97 @@ export function App() {
   }, [view]);
 
   useEffect(() => {
-    if ((view === "tripDetail" || view === "booking") && !selectedTrip) {
+    if ((view === "tripDetail" || view === "booking") && !selectedTrip && !routeTripSlug) {
       setView("trips");
     }
 
-    if (view === "cityDetail" && !selectedCity) {
+    if (view === "cityDetail" && !selectedCity && !routeCitySlug) {
       setView("cities");
     }
-  }, [selectedCity, selectedTrip, view]);
+  }, [routeCitySlug, routeTripSlug, selectedCity, selectedTrip, view]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = getRouteFromPathname(window.location.pathname);
+      setViewState(route.view);
+      setRouteTripSlug(route.tripSlug);
+      setRouteCitySlug(route.citySlug);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    const desiredPath = getPathForView(view, selectedTrip, selectedCity, routeTripSlug, routeCitySlug);
+    if (normalizePathname(window.location.pathname) !== desiredPath) {
+      window.history.replaceState({}, "", desiredPath);
+    }
+  }, [routeCitySlug, routeTripSlug, selectedCity, selectedTrip, view]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadTripFromRoute() {
+      if ((view !== "tripDetail" && view !== "booking") || !routeTripSlug || selectedTrip?.slug === routeTripSlug || !supabase) {
+        return;
+      }
+
+      const { data } = await supabase.from("trips").select(tripSelect).eq("published", true).eq("slug", routeTripSlug).maybeSingle();
+      if (!active) return;
+
+      if (data) {
+        setSelectedTrip(dbTripToTrip(data as unknown as DbTrip));
+        return;
+      }
+
+      setViewState("trips");
+      setRouteTripSlug(null);
+    }
+
+    loadTripFromRoute();
+
+    return () => {
+      active = false;
+    };
+  }, [routeTripSlug, selectedTrip?.slug, view]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCityFromRoute() {
+      if (view !== "cityDetail" || !routeCitySlug || selectedCity?.slug === routeCitySlug || !supabase) {
+        return;
+      }
+
+      const { data } = await supabase
+        .from("cities")
+        .select("id,slug,name,province,image_url,tagline,support_email,support_phone,trips(count)")
+        .eq("active", true)
+        .eq("slug", routeCitySlug)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (data) {
+        const city = data as unknown as CityDestination;
+        setSelectedCity({
+          ...city,
+          tripCount: city.trips?.[0]?.count ?? 0,
+        });
+        return;
+      }
+
+      setViewState("cities");
+      setRouteCitySlug(null);
+    }
+
+    loadCityFromRoute();
+
+    return () => {
+      active = false;
+    };
+  }, [routeCitySlug, selectedCity?.slug, view]);
 
   useEffect(() => {
     if (!isLoggedIn && authRequiredViews.has(view)) {

@@ -24,6 +24,7 @@ export function TripsScreen({
   const [query, setQuery] = useState(initialFilters?.query ?? "");
   const [city, setCity] = useState(initialFilters?.city ?? "");
   const [category, setCategory] = useState(initialFilters?.category ?? "");
+  const [specialCollection, setSpecialCollection] = useState(initialFilters?.specialCollection ?? "");
   const [cities, setCities] = useState<DbCity[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +67,8 @@ export function TripsScreen({
     setQuery(initialFilters?.query ?? "");
     setCity(initialFilters?.city ?? "");
     setCategory(initialFilters?.category ?? "");
-  }, [initialFilters?.category, initialFilters?.city, initialFilters?.query]);
+    setSpecialCollection(initialFilters?.specialCollection ?? "");
+  }, [initialFilters?.category, initialFilters?.city, initialFilters?.query, initialFilters?.specialCollection]);
 
   const categories = useMemo(() => Array.from(new Set(trips.map((trip) => trip.category))).filter(Boolean), [trips]);
 
@@ -76,17 +78,22 @@ export function TripsScreen({
         const matchesQuery = `${trip.title} ${trip.summary} ${trip.category}`.toLowerCase().includes(query.toLowerCase());
         const matchesCity = !city || trip.city === city;
         const matchesCategory = !category || trip.category === category;
-        return matchesQuery && matchesCity && matchesCategory;
+        const matchesSpecialCollection = !specialCollection || trip.specialCollectionSlug === specialCollection;
+        return matchesQuery && matchesCity && matchesCategory && matchesSpecialCollection;
       }),
-    [category, city, query, trips],
+    [category, city, query, specialCollection, trips],
   );
 
   return (
     <main className="container page">
       <div className="trips-title">
-        <span className="eyebrow dark">Discover departures</span>
-        <h1 className="font-display">Find your next departure</h1>
-        <p>Filter by city, style, and availability to compare the trips that fit your budget and dates.</p>
+        <span className="eyebrow dark">{specialCollection ? "Special departures" : "Discover departures"}</span>
+        <h1 className="font-display">{initialFilters?.label?.trim() || (specialCollection ? "Special Trips" : "Find your next departure")}</h1>
+        <p>
+          {specialCollection
+            ? "These highlighted departures are linked to the latest campaign and update banner."
+            : "Filter by city, style, and availability to compare the trips that fit your budget and dates."}
+        </p>
       </div>
 
       <section className="card trips-filter-card">
@@ -112,6 +119,7 @@ export function TripsScreen({
             ))}
           </select>
         </label>
+        {specialCollection ? <span className="trips-result-count">Showing {initialFilters?.label?.trim() || "special trips"}</span> : null}
         <span className="trips-result-count">{filteredTrips.length} trips found</span>
       </section>
 

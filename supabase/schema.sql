@@ -196,6 +196,27 @@ create index if not exists trips_start_date_idx on public.trips(start_date);
 create index if not exists trips_status_idx on public.trips(status);
 
 alter table public.trips add column if not exists pickup_points text[] not null default '{}';
+alter table public.trips add column if not exists is_special boolean not null default false;
+alter table public.trips add column if not exists special_collection_slug text;
+alter table public.trips add column if not exists original_price_cents integer;
+create index if not exists trips_special_collection_slug_idx on public.trips(special_collection_slug);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'trips_original_price_cents_check'
+  ) then
+    alter table public.trips
+      add constraint trips_original_price_cents_check
+      check (
+        original_price_cents is null
+        or original_price_cents >= price_cents
+      );
+  end if;
+end
+$$;
 
 create or replace trigger trips_set_updated_at
 before update on public.trips
@@ -317,6 +338,7 @@ create table if not exists public.updates (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   body text not null,
+  banner_special_collection_slug text,
   published_on date not null default current_date,
   published boolean not null default true,
   created_at timestamptz not null default now(),

@@ -582,6 +582,23 @@ select {
   font-size: 11px;
 }
 
+.trip-price-stack {
+  display: grid;
+  gap: 2px;
+}
+
+.trip-price-stack span {
+  color: #7b8796;
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: line-through;
+}
+
+.trip-price-stack em {
+  color: var(--primary);
+  font-style: normal;
+}
+
 .trip-facts span:nth-child(2),
 .trip-facts strong:nth-child(4) {
   justify-content: flex-end;
@@ -1058,6 +1075,7 @@ select {
 
 .footer-credit-line {
   margin-top: 8px !important;
+  text-align: right;
 }
 
 .footer-credit-link {
@@ -1133,11 +1151,12 @@ select {
 }
 
 .footer-brand-note {
-  max-width: 380px;
   color: #536174 !important;
   font-size: 12px;
   line-height: 1.5;
-  text-align: right;
+  margin-top: 8px !important;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .floating-chat-button {
@@ -1216,6 +1235,10 @@ select {
   }
 
   .footer-brand-note {
+    text-align: left;
+  }
+
+  .footer-credit-line {
     text-align: left;
   }
 

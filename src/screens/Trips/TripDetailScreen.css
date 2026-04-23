@@ -251,6 +251,28 @@
   gap: 14px;
 }
 
+.trip-detail-price-block {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #ecdca8;
+  border-radius: 12px;
+  background: #fff9e8;
+  padding: 12px;
+}
+
+.trip-detail-price-block span {
+  color: #7e6a36;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: line-through;
+  text-transform: uppercase;
+}
+
+.trip-detail-price-block strong {
+  color: var(--primary);
+  font-size: 18px;
+}
+
 .trip-booking-card dl {
   display: grid;
   gap: 8px;

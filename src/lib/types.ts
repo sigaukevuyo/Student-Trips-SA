@@ -10,10 +10,13 @@ export type Trip = {
   startDate: string;
   duration: string;
   price: number;
+  originalPrice: number | null;
   deposit: number;
   seatsRemaining: number;
   capacity: number;
   status: TripStatus;
+  isSpecial: boolean;
+  specialCollectionSlug: string | null;
   featured?: boolean;
   tags: string[];
   summary: string;

@@ -381,6 +381,12 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
             <strong>{trip.city}</strong>
             <span>{trip.category}</span>
           </section>
+          {trip.originalPrice && trip.originalPrice > trip.price ? (
+            <section className="booking-summary-sale">
+              <span>Was {formatTripMoney(trip.originalPrice)}</span>
+              <strong>Now {formatTripMoney(trip.price)}</strong>
+            </section>
+          ) : null}
           <div className="booking-summary-meta">
             <span><Users size={17} /> {travelers} traveler{travelers === 1 ? "" : "s"}</span>
             <span><CalendarDays size={17} /> {formatDate(trip.startDate)}</span>

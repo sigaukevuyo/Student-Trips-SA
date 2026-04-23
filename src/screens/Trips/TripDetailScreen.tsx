@@ -25,7 +25,7 @@ export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView
     );
   }
 
-  const soldOut = trip.status === "SOLD_OUT";
+  const soldOut = trip.seatsRemaining <= 0 || trip.capacity <= 0 || trip.status === "SOLD_OUT";
   const nearlyFull = trip.status === "NEARLY_FULL";
   const bookingDeadline = formatDate(trip.startDate);
   const pickupPoints = trip.pickupPoints.length > 0 ? trip.pickupPoints : ["Main university pickup"];
@@ -41,6 +41,7 @@ export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView
           <div className="trip-detail-tags">
             <span>{trip.city}</span>
             <span>{trip.category}</span>
+            {trip.isSpecial ? <span>Special trip</span> : null}
             <span>{soldOut ? "Sold out" : nearlyFull ? "Nearly full" : "Open"}</span>
           </div>
 
@@ -123,6 +124,12 @@ export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView
         <aside className="trip-detail-sidebar">
           <section className="card trip-booking-card">
             <h2>Book This Trip</h2>
+            {trip.originalPrice && trip.originalPrice > trip.price ? (
+              <div className="trip-detail-price-block">
+                <span>Was {formatTripMoney(trip.originalPrice)}</span>
+                <strong>Now {formatTripMoney(trip.price)}</strong>
+              </div>
+            ) : null}
             <dl>
               <div><dt>From price</dt><dd>{formatTripMoney(trip.price)}</dd></div>
               <div><dt>Deposit option</dt><dd>{formatTripMoney(trip.deposit)}</dd></div>

@@ -67,10 +67,13 @@ type AdminTrip = {
   start_date: string;
   duration: string | null;
   price_cents: number;
+  original_price_cents: number | null;
   deposit_cents: number;
   capacity: number;
   seats_remaining: number;
   status: string;
+  is_special: boolean;
+  special_collection_slug: string | null;
   published: boolean;
   created_at: string;
   cities: { id: string | null; name: string | null } | null;
@@ -128,6 +131,7 @@ type AdminUpdate = {
   id: string;
   title: string;
   body: string;
+  banner_special_collection_slug: string | null;
   published_on: string;
   published: boolean;
   created_at: string;
@@ -220,9 +224,12 @@ export function AdminScreen() {
     start_date: "",
     duration: "",
     price: "",
+    original_price: "",
     deposit: "",
     capacity: "",
     seats_remaining: "",
+    is_special: false,
+    special_collection_slug: "",
   });
   const [tripImageFile, setTripImageFile] = useState<File | null>(null);
   const [reviewForm, setReviewForm] = useState({
@@ -234,6 +241,7 @@ export function AdminScreen() {
   const [updateForm, setUpdateForm] = useState({
     title: "",
     body: "",
+    banner_special_collection_slug: "",
     published_on: new Date().toISOString().slice(0, 10),
     published: true,
   });
@@ -293,12 +301,12 @@ export function AdminScreen() {
       userId ? supabase.from("profiles").select("id,role,branch_city_id,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at,cities(name)").eq("id", userId).maybeSingle() : Promise.resolve({ data: null, error: null }),
       supabase.from("profiles").select("id,role,branch_city_id,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at,cities(name)").order("created_at", { ascending: false }).limit(100),
       supabase.from("cities").select("id,slug,name,province,active,support_email,support_phone,image_url,tagline,trips(count)").order("name"),
-      supabase.from("trips").select("id,slug,title,category,image_url,summary,meeting_point,start_date,duration,price_cents,deposit_cents,capacity,seats_remaining,status,published,created_at,cities(id,name)").order("created_at", { ascending: false }).limit(100),
+      supabase.from("trips").select("id,slug,title,category,image_url,summary,meeting_point,pickup_points,start_date,duration,price_cents,original_price_cents,deposit_cents,capacity,seats_remaining,status,is_special,special_collection_slug,published,created_at,cities(id,name)").order("created_at", { ascending: false }).limit(100),
       supabase.from("bookings").select("id,user_id,booking_ref,status,total_cents,paid_cents,outstanding_cents,created_at,trips(title,cities(name))").order("created_at", { ascending: false }).limit(100),
       supabase.from("payments").select("id,amount_cents,method,status,provider,provider_reference,paid_at,created_at,bookings(booking_ref,status,trips(title))").order("created_at", { ascending: false }).limit(100),
       supabase.from("payment_proofs").select("id,booking_id,file_path,file_name,amount_cents,approved,created_at,bookings(booking_ref)").order("created_at", { ascending: false }).limit(100),
       supabase.from("partner_inquiries").select("id,inquiry_type,name,email,phone,organisation,campus,preferred_city,details,created_at").order("created_at", { ascending: false }).limit(100),
-      supabase.from("updates").select("id,title,body,published_on,published,created_at").order("published_on", { ascending: false }).limit(100),
+      supabase.from("updates").select("id,title,body,banner_special_collection_slug,published_on,published,created_at").order("published_on", { ascending: false }).limit(100),
       supabase.from("reviews").select("id,trip_id,author_name,rating,quote,published,created_at,trips(title)").order("created_at", { ascending: false }).limit(100),
     ]);
 
@@ -439,9 +447,12 @@ export function AdminScreen() {
       start_date: "",
       duration: "",
       price: "",
+      original_price: "",
       deposit: "",
       capacity: "",
       seats_remaining: "",
+      is_special: false,
+      special_collection_slug: "",
     });
     setTripImageFile(null);
   }
@@ -469,6 +480,7 @@ export function AdminScreen() {
     setUpdateForm({
       title: "",
       body: "",
+      banner_special_collection_slug: "",
       published_on: new Date().toISOString().slice(0, 10),
       published: true,
     });
@@ -541,6 +553,7 @@ export function AdminScreen() {
       setUpdateForm({
         title: update.title,
         body: update.body,
+        banner_special_collection_slug: update.banner_special_collection_slug ?? "",
         published_on: update.published_on,
         published: update.published,
       });
@@ -582,9 +595,12 @@ export function AdminScreen() {
         start_date: trip.start_date,
         duration: trip.duration ?? "",
         price: String(trip.price_cents / 100),
+        original_price: trip.original_price_cents ? String(trip.original_price_cents / 100) : "",
         deposit: String(trip.deposit_cents / 100),
         capacity: String(trip.capacity),
         seats_remaining: String(trip.seats_remaining),
+        is_special: Boolean(trip.is_special),
+        special_collection_slug: trip.special_collection_slug ?? "",
       });
     } else {
       resetTripForm();
@@ -704,10 +720,12 @@ export function AdminScreen() {
     const title = tripForm.title.trim();
     const slug = (tripForm.slug.trim() || slugify(title)).trim();
     const priceCents = Math.round(Number(tripForm.price) * 100);
+    const originalPriceCents = tripForm.original_price ? Math.round(Number(tripForm.original_price) * 100) : null;
     const depositCents = Math.round(Number(tripForm.deposit || "0") * 100);
     const capacity = Number.parseInt(tripForm.capacity, 10);
     const seatsRemaining = Number.parseInt(tripForm.seats_remaining || tripForm.capacity, 10);
     const pickupPoints = tripForm.pickup_points.map((point) => point.trim()).filter(Boolean);
+    const specialCollectionSlug = tripForm.is_special ? (tripForm.special_collection_slug.trim() || slugify(title)) : null;
 
     if (!title || !slug || !tripForm.category.trim() || !tripForm.start_date || (!editingTripId && !tripForm.city_id)) {
       setError("Trip title, slug, city, category, and start date are required.");
@@ -716,6 +734,11 @@ export function AdminScreen() {
 
     if (!Number.isFinite(priceCents) || priceCents < 0 || !Number.isFinite(capacity) || capacity <= 0 || !Number.isFinite(seatsRemaining) || seatsRemaining < 0) {
       setError("Trip price, capacity, and seats must be valid numbers.");
+      return;
+    }
+
+    if (originalPriceCents !== null && (!Number.isFinite(originalPriceCents) || originalPriceCents < priceCents)) {
+      setError("Original price must be greater than or equal to the current price.");
       return;
     }
 
@@ -738,9 +761,12 @@ export function AdminScreen() {
       start_date: tripForm.start_date,
       duration: tripForm.duration.trim() || null,
       price_cents: priceCents,
+      original_price_cents: originalPriceCents,
       deposit_cents: depositCents,
       capacity,
       seats_remaining: Math.min(seatsRemaining, capacity),
+      is_special: tripForm.is_special,
+      special_collection_slug: specialCollectionSlug,
       status: "OPEN",
       featured: false,
       published: true,
@@ -836,6 +862,7 @@ export function AdminScreen() {
     const updateValues = {
       title,
       body,
+      banner_special_collection_slug: updateForm.banner_special_collection_slug.trim() || null,
       published_on: updateForm.published_on,
       published: updateForm.published,
     };
@@ -1217,7 +1244,7 @@ export function AdminScreen() {
                     <input type="date" value={String(editingValues.start_date ?? "")} onChange={(event) => setEditingValue("start_date", event.target.value)} />
                     <span>{trip.cities?.name ?? "No city"} - {trip.seats_remaining}/{trip.capacity} seats</span>
                   </div>
-                  <strong>{formatMoney(trip.price_cents)}</strong>
+                  <strong>{trip.original_price_cents && trip.original_price_cents > trip.price_cents ? `${formatMoney(trip.original_price_cents)} -> ${formatMoney(trip.price_cents)}` : formatMoney(trip.price_cents)}</strong>
                   <div className="admin-edit-stack">
                     <StatusBadge status={deriveTripStatus(trip.capacity, trip.seats_remaining)} />
                     <label className="admin-check"><input type="checkbox" checked={Boolean(editingValues.published)} onChange={(event) => setEditingValue("published", event.target.checked)} /> Published</label>
@@ -1230,9 +1257,9 @@ export function AdminScreen() {
                 </article>
               ) : (
                 <article key={trip.id} className="admin-table-row admin-table-row-trip">
-                  <div><strong>{trip.title}</strong><span>{trip.cities?.name ?? "No city"} - {trip.category}</span></div>
+                  <div><strong>{trip.title}</strong><span>{trip.cities?.name ?? "No city"} - {trip.category}{trip.is_special ? ` - ${trip.special_collection_slug ?? "special"}` : ""}</span></div>
                   <div><strong>{formatDate(trip.start_date)}</strong><span>{trip.seats_remaining}/{trip.capacity} seats</span></div>
-                  <strong>{formatMoney(trip.price_cents)}</strong>
+                  <strong>{trip.original_price_cents && trip.original_price_cents > trip.price_cents ? `${formatMoney(trip.original_price_cents)} -> ${formatMoney(trip.price_cents)}` : formatMoney(trip.price_cents)}</strong>
                   <StatusBadge status={trip.published ? deriveTripStatus(trip.capacity, trip.seats_remaining) : "Draft"} />
                   <div className="admin-actions">
                     <Button variant="secondary" onClick={() => openTripForm(trip)}>Edit</Button>
@@ -1657,6 +1684,10 @@ export function AdminScreen() {
                 <input type="number" min="0" step="0.01" value={tripForm.price} onChange={(event) => setTripFormValue("price", event.target.value)} placeholder="3499" />
               </label>
               <label>
+                Original price
+                <input type="number" min="0" step="0.01" value={tripForm.original_price} onChange={(event) => setTripFormValue("original_price", event.target.value)} placeholder="3999" />
+              </label>
+              <label>
                 Deposit
                 <input type="number" min="0" step="0.01" value={tripForm.deposit} onChange={(event) => setTripFormValue("deposit", event.target.value)} placeholder="499" />
               </label>
@@ -1667,6 +1698,18 @@ export function AdminScreen() {
               <label>
                 Seats remaining
                 <input type="number" min="0" value={tripForm.seats_remaining} onChange={(event) => setTripFormValue("seats_remaining", event.target.value)} placeholder={tripForm.capacity || "18"} />
+              </label>
+              <label className="admin-check">
+                Special trip
+                <input type="checkbox" checked={tripForm.is_special} onChange={(event) => setTripFormValue("is_special", event.target.checked)} />
+              </label>
+              <label>
+                Special collection
+                <input
+                  value={tripForm.special_collection_slug}
+                  onChange={(event) => setTripFormValue("special_collection_slug", event.target.value)}
+                  placeholder={tripForm.title ? `${slugify(tripForm.title)}-specials` : "winter-specials"}
+                />
               </label>
               <label className="admin-upload-field">
                 Trip image
@@ -1723,7 +1766,7 @@ export function AdminScreen() {
             {updates.length === 0 ? <EmptyState title="No updates yet" detail="Published news and operational updates will appear here." /> : null}
             {updates.map((update) => (
               <article key={update.id} className="admin-table-row admin-table-row-update">
-                <div><strong>{update.title}</strong><span>{update.body}</span></div>
+                <div><strong>{update.title}</strong><span>{update.body}{update.banner_special_collection_slug ? ` -> ${update.banner_special_collection_slug}` : ""}</span></div>
                 <div><strong>{formatDate(update.published_on)}</strong><span>{formatDate(update.created_at)}</span></div>
                 <StatusBadge status={update.published ? "Published" : "Draft"} />
                 <div className="admin-actions">
@@ -1812,6 +1855,14 @@ export function AdminScreen() {
               <label>
                 Published on
                 <input type="date" value={updateForm.published_on} onChange={(event) => setUpdateFormValue("published_on", event.target.value)} />
+              </label>
+              <label>
+                Banner trip collection
+                <input
+                  value={updateForm.banner_special_collection_slug}
+                  onChange={(event) => setUpdateFormValue("banner_special_collection_slug", event.target.value)}
+                  placeholder="winter-specials"
+                />
               </label>
               <label className="admin-modal-full">
                 Body
