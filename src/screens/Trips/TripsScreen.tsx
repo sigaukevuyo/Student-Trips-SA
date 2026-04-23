@@ -89,11 +89,7 @@ export function TripsScreen({
       <div className="trips-title">
         <span className="eyebrow dark">{specialCollection ? "Special departures" : "Discover departures"}</span>
         <h1 className="font-display">{initialFilters?.label?.trim() || (specialCollection ? "Special Trips" : "Find your next departure")}</h1>
-        <p>
-          {specialCollection
-            ? "These highlighted departures are linked to the latest campaign and update banner."
-            : "Filter by city, style, and availability to compare the trips that fit your budget and dates."}
-        </p>
+        <p>{specialCollection ? "Browse the latest highlighted departures and book before spaces fill up." : "Filter by city, style, and availability to compare the trips that fit your budget and dates."}</p>
       </div>
 
       <section className="card trips-filter-card">
