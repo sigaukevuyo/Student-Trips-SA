@@ -46,7 +46,7 @@
 
 .booking-steps {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 12px;
 }
@@ -155,7 +155,8 @@
   gap: 10px;
 }
 
-.booking-payment-methods button {
+.booking-payment-methods button,
+.booking-payment-methods > div {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -168,7 +169,8 @@
   text-align: left;
 }
 
-.booking-payment-methods button.active {
+.booking-payment-methods button.active,
+.booking-payment-methods > div.active {
   border-color: #e6a614;
   background: var(--accent-soft);
   box-shadow: inset 3px 0 0 var(--accent);
@@ -193,6 +195,100 @@
 .booking-payment-ready div {
   display: grid;
   gap: 4px;
+}
+
+.booking-bank-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
+    #fbfcfd;
+  padding: 14px;
+}
+
+.booking-bank-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.booking-bank-card-top div {
+  display: grid;
+  gap: 4px;
+}
+
+.booking-bank-card-top span,
+.booking-bank-item span,
+.booking-bank-reference span {
+  color: var(--muted-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.booking-bank-card-top strong {
+  color: var(--primary);
+  font-size: 20px;
+}
+
+.booking-bank-card-top em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--warning);
+  padding: 0 12px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.booking-bank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.booking-bank-item {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #e3eaf1;
+  border-radius: 10px;
+  background: white;
+  padding: 12px;
+}
+
+.booking-bank-item strong,
+.booking-bank-reference strong {
+  color: var(--primary);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.booking-bank-reference {
+  display: grid;
+  gap: 6px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: white;
+  padding: 14px;
+}
+
+.booking-bank-reference span,
+.booking-bank-reference strong,
+.booking-bank-reference small {
+  color: white;
+}
+
+.booking-bank-reference small {
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .booking-choice span,
@@ -399,7 +495,8 @@
   .booking-layout,
   .booking-steps,
   .booking-payment-methods,
-  .booking-form-grid {
+  .booking-form-grid,
+  .booking-bank-grid {
     grid-template-columns: 1fr;
   }
 

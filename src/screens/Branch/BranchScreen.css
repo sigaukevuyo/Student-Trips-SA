@@ -11,3 +11,259 @@
   font-weight: 800;
   padding: 13px;
 }
+
+.branch-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.branch-table {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.branch-table-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.8fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fbfcfd;
+  padding: 13px;
+}
+
+.branch-table-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.branch-table-row strong {
+  overflow: hidden;
+  color: var(--primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-table-row span,
+.branch-table-row a {
+  overflow: hidden;
+  color: var(--muted-ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-table-row a {
+  color: var(--primary);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.branch-add-button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--primary);
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.branch-proof-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  margin-bottom: 18px;
+}
+
+.branch-proof-row {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fbfcfd;
+  padding: 14px;
+}
+
+.branch-proof-head,
+.branch-proof-meta,
+.branch-proof-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.branch-proof-head {
+  justify-content: space-between;
+}
+
+.branch-proof-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.branch-proof-head strong,
+.branch-proof-meta span {
+  color: var(--primary);
+}
+
+.branch-proof-head span {
+  color: var(--muted-ink);
+  font-size: 13px;
+}
+
+.branch-proof-meta {
+  flex-wrap: wrap;
+}
+
+.branch-proof-meta span {
+  font-size: 13px;
+}
+
+.branch-proof-actions {
+  flex-wrap: wrap;
+}
+
+.branch-proof-actions .button {
+  min-height: 34px;
+}
+
+.branch-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: rgba(7, 26, 43, 0.46);
+  padding: 20px;
+}
+
+.branch-modal {
+  width: min(100%, 720px);
+  max-height: min(92vh, 760px);
+  overflow: auto;
+  scrollbar-width: none;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 28px 80px rgba(7, 26, 43, 0.28);
+  padding: 22px;
+}
+
+.branch-modal::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.branch-modal .card-head {
+  align-items: flex-start;
+}
+
+.branch-modal .card-head h3 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 26px;
+}
+
+.branch-modal .card-head p {
+  margin: 5px 0 0;
+  color: var(--muted-ink);
+  font-size: 13px;
+}
+
+.branch-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.branch-modal-grid label {
+  display: grid;
+  gap: 7px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.branch-modal-grid input,
+.branch-modal-grid textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  color: var(--primary);
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.branch-modal-grid input[readonly] {
+  background: #f4f7fa;
+  color: var(--muted-ink);
+}
+
+.branch-modal-grid textarea {
+  min-height: 92px;
+  padding: 11px 12px;
+  resize: vertical;
+}
+
+.branch-modal-full {
+  grid-column: 1 / -1;
+}
+
+.branch-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.branch-modal-actions button {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: white;
+  color: var(--primary);
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.branch-modal-actions button:last-child {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+.branch-modal-actions button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+@media (max-width: 980px) {
+  .branch-dashboard-grid,
+  .branch-table-row {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-proof-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .branch-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-modal-actions {
+    justify-content: flex-start;
+  }
+}

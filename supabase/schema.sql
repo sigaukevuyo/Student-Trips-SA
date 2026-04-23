@@ -86,21 +86,36 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  branch_assignment record;
 begin
-  insert into public.profiles (id, email, first_name, last_name, phone)
+  select *
+  into branch_assignment
+  from public.branch_manager_assignments
+  where email = lower(new.email)
+    and active = true
+  limit 1;
+
+  insert into public.profiles (id, email, role, branch_city_id, first_name, last_name, phone, organisation)
   values (
     new.id,
     new.email,
-    new.raw_user_meta_data ->> 'first_name',
-    new.raw_user_meta_data ->> 'last_name',
-    new.raw_user_meta_data ->> 'phone'
+    case when branch_assignment.id is not null then 'branch'::public.user_role else 'customer'::public.user_role end,
+    branch_assignment.branch_city_id,
+    coalesce(new.raw_user_meta_data ->> 'first_name', branch_assignment.first_name),
+    coalesce(new.raw_user_meta_data ->> 'last_name', branch_assignment.last_name),
+    coalesce(new.raw_user_meta_data ->> 'phone', branch_assignment.phone),
+    branch_assignment.organisation
   )
   on conflict (id) do update
   set
     email = excluded.email,
+    role = case when branch_assignment.id is not null then 'branch'::public.user_role else public.profiles.role end,
+    branch_city_id = coalesce(branch_assignment.branch_city_id, public.profiles.branch_city_id),
     first_name = coalesce(public.profiles.first_name, excluded.first_name),
     last_name = coalesce(public.profiles.last_name, excluded.last_name),
-    phone = coalesce(public.profiles.phone, excluded.phone);
+    phone = coalesce(public.profiles.phone, excluded.phone),
+    organisation = coalesce(public.profiles.organisation, excluded.organisation);
 
   return new;
 end;
@@ -124,6 +139,28 @@ create table if not exists public.cities (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles add column if not exists branch_city_id uuid references public.cities(id) on delete set null;
+create index if not exists profiles_branch_city_id_idx on public.profiles(branch_city_id);
+
+create table if not exists public.branch_manager_assignments (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  branch_city_id uuid not null references public.cities(id) on delete cascade,
+  first_name text,
+  last_name text,
+  phone text,
+  organisation text,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists branch_manager_assignments_branch_city_id_idx on public.branch_manager_assignments(branch_city_id);
+
+create or replace trigger branch_manager_assignments_set_updated_at
+before update on public.branch_manager_assignments
+for each row execute function public.set_updated_at();
 
 create or replace trigger cities_set_updated_at
 before update on public.cities
@@ -331,6 +368,55 @@ as $$
   select coalesce(public.current_user_role() in ('admin', 'branch'), false)
 $$;
 
+create or replace function public.current_branch_city_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select branch_city_id from public.profiles where id = auth.uid()
+$$;
+
+create or replace function public.can_access_trip(trip_id_param uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    public.is_admin()
+    or exists (
+      select 1
+      from public.trips t
+      where t.id = trip_id_param
+        and t.city_id = public.current_branch_city_id()
+    ),
+    false
+  )
+$$;
+
+create or replace function public.can_access_booking(booking_id_param uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    public.is_admin()
+    or exists (
+      select 1
+      from public.bookings b
+      join public.trips t on t.id = b.trip_id
+      where b.id = booking_id_param
+        and t.city_id = public.current_branch_city_id()
+    ),
+    false
+  )
+$$;
+
 create or replace function public.cancel_booking(booking_id_param uuid)
 returns public.booking_status
 language plpgsql
@@ -431,6 +517,7 @@ using (
 );
 
 alter table public.profiles enable row level security;
+alter table public.branch_manager_assignments enable row level security;
 alter table public.cities enable row level security;
 alter table public.trips enable row level security;
 alter table public.bookings enable row level security;
@@ -456,6 +543,13 @@ to authenticated
 using (id = auth.uid() or public.is_admin())
 with check (id = auth.uid() or public.is_admin());
 
+drop policy if exists "branch manager assignments admin manage" on public.branch_manager_assignments;
+create policy "branch manager assignments admin manage"
+on public.branch_manager_assignments for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
 drop policy if exists "cities public read active" on public.cities;
 create policy "cities public read active"
 on public.cities for select
@@ -479,14 +573,14 @@ drop policy if exists "trips staff manage" on public.trips;
 create policy "trips staff manage"
 on public.trips for all
 to authenticated
-using (public.is_staff())
-with check (public.is_staff());
+using (public.is_admin() or city_id = public.current_branch_city_id())
+with check (public.is_admin() or city_id = public.current_branch_city_id());
 
 drop policy if exists "bookings read own or staff" on public.bookings;
 create policy "bookings read own or staff"
 on public.bookings for select
 to authenticated
-using (user_id = auth.uid() or public.is_staff());
+using (user_id = auth.uid() or public.can_access_booking(id));
 
 drop policy if exists "bookings create own" on public.bookings;
 create policy "bookings create own"
@@ -499,14 +593,14 @@ drop policy if exists "bookings staff update" on public.bookings;
 create policy "bookings staff update"
 on public.bookings for update
 to authenticated
-using (public.is_staff())
-with check (public.is_staff());
+using (public.can_access_booking(id))
+with check (public.can_access_booking(id));
 
 drop policy if exists "payments read own or staff" on public.payments;
 create policy "payments read own or staff"
 on public.payments for select
 to authenticated
-using (user_id = auth.uid() or public.is_staff());
+using (user_id = auth.uid() or public.can_access_booking(booking_id));
 
 drop policy if exists "payments create own" on public.payments;
 create policy "payments create own"
@@ -518,14 +612,14 @@ drop policy if exists "payments staff update" on public.payments;
 create policy "payments staff update"
 on public.payments for update
 to authenticated
-using (public.is_staff())
-with check (public.is_staff());
+using (public.can_access_booking(booking_id))
+with check (public.can_access_booking(booking_id));
 
 drop policy if exists "payment proofs read own or staff" on public.payment_proofs;
 create policy "payment proofs read own or staff"
 on public.payment_proofs for select
 to authenticated
-using (user_id = auth.uid() or public.is_staff());
+using (user_id = auth.uid() or public.can_access_booking(booking_id));
 
 drop policy if exists "payment proofs create own" on public.payment_proofs;
 create policy "payment proofs create own"
@@ -537,8 +631,8 @@ drop policy if exists "payment proofs staff update" on public.payment_proofs;
 create policy "payment proofs staff update"
 on public.payment_proofs for update
 to authenticated
-using (public.is_staff())
-with check (public.is_staff());
+using (public.can_access_booking(booking_id))
+with check (public.can_access_booking(booking_id));
 
 drop policy if exists "waivers read own or staff" on public.waiver_acceptances;
 create policy "waivers read own or staff"
@@ -575,7 +669,15 @@ drop policy if exists "partner inquiries staff read" on public.partner_inquiries
 create policy "partner inquiries staff read"
 on public.partner_inquiries for select
 to authenticated
-using (public.is_staff());
+using (
+  public.is_admin()
+  or exists (
+    select 1
+    from public.cities c
+    where c.id = public.current_branch_city_id()
+      and c.name = preferred_city
+  )
+);
 
 drop policy if exists "contact inquiries create public" on public.contact_inquiries;
 create policy "contact inquiries create public"

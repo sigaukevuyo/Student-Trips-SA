@@ -1,6 +1,7 @@
 import { Menu } from "lucide-react";
 import { useState } from "react";
 
+import { useCurrency, type SupportedCurrency } from "../../lib/currency";
 import { navItems, type View } from "../navigation";
 import { cx } from "../utils/cx";
 
@@ -18,6 +19,7 @@ export function AppHeader({
   setView: (view: View) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const { currency, setCurrency } = useCurrency();
 
   return (
     <header className="site-header">
@@ -40,12 +42,17 @@ export function AppHeader({
         </nav>
 
         <div className="header-actions">
-          <select className="currency-select" defaultValue="ZAR" aria-label="Currency">
-            <option>ZAR</option>
-            <option>USD</option>
-            <option>EUR</option>
-            <option>GBP</option>
-            <option>AUD</option>
+          <select
+            className="currency-select"
+            value={currency}
+            aria-label="Currency"
+            onChange={(event) => setCurrency(event.target.value as SupportedCurrency)}
+          >
+            <option value="ZAR">ZAR</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="AUD">AUD</option>
           </select>
           <button className="header-pill" onClick={onDashboardClick} type="button">
             {isLoggedIn ? "Dashboard" : "Login"}

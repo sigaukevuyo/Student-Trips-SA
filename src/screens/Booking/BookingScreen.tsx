@@ -1,24 +1,36 @@
-import { CalendarDays, CheckCircle2, Clock, CreditCard, FileUp, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock, FileUp, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { formatDate, formatMoney } from "../../lib/data";
+import { useCurrency } from "../../lib/currency";
+import { formatDate } from "../../lib/data";
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
 import type { View } from "../../shared/navigation";
 import "./BookingScreen.css";
 
-const steps = ["Traveler setup", "Review details", "Payment"];
+const steps = ["Traveler setup", "Review details", "Bank details", "Payment proof"];
 const proofBucket = "payment-proofs";
+const maxTravelersPerBooking = 8;
+const bankDetails = [
+  { label: "Account name", value: "YEBOGO SA (PTY) LTD" },
+  { label: "Bank", value: "First National Bank (FNB)" },
+  { label: "Account number", value: "63185946630" },
+  { label: "Branch code", value: "250655" },
+  { label: "Account type", value: "Gold Business Account" },
+  { label: "SWIFT code", value: "FIRNZAJJ" },
+] as const;
 
 type PaymentOption = "full" | "deposit";
-type PaymentMethod = "card" | "proof";
+type PaymentMethod = "proof";
 
 export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (view: View) => void }) {
+  const { formatTripMoney, priceNotice } = useCurrency();
   const [activeStep, setActiveStep] = useState(0);
   const [travelers, setTravelers] = useState(1);
   const [companionNames, setCompanionNames] = useState<string[]>([]);
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("full");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
+  const [paymentMethod] = useState<PaymentMethod>("proof");
   const [pickupPoint, setPickupPoint] = useState("");
   const [referralCode, setReferralCode] = useState("");
   const [proofFile, setProofFile] = useState<File | null>(null);
@@ -30,16 +42,17 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
   const pickupPoints = useMemo(() => {
     if (!trip) return [];
     const points = trip.pickupPoints.length > 0 ? trip.pickupPoints : [trip.meetingPoint].filter(Boolean);
-    return points.length > 0 ? points : ["Main campus pickup"];
+    return points.length > 0 ? points : ["Main university pickup"];
   }, [trip]);
 
   const selectedPickupPoint = pickupPoint || pickupPoints[0] || "";
+  const travelerLimit = Math.max(1, Math.min(trip?.seatsRemaining ?? 1, maxTravelersPerBooking));
   const amountPerTraveler = paymentOption === "deposit" ? trip?.deposit ?? 0 : trip?.price ?? 0;
   const dueNow = amountPerTraveler * travelers;
   const companionCount = Math.max(travelers - 1, 0);
 
   const updateTravelers = (value: number) => {
-    const nextTravelers = Math.max(1, Math.min(value || 1, Math.max(trip?.seatsRemaining ?? 1, 1)));
+    const nextTravelers = Math.max(1, Math.min(value || 1, travelerLimit));
     setTravelers(nextTravelers);
     setCompanionNames((current) => Array.from({ length: Math.max(nextTravelers - 1, 0) }, (_, index) => current[index] ?? ""));
   };
@@ -93,7 +106,7 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
         booking_ref: bookingRef,
         user_id: user.id,
         trip_id: trip.id,
-        status: paymentMethod === "proof" ? "Awaiting Proof" : "Pending Payment",
+        status: "Awaiting Proof",
         traveler_first_name: profile?.first_name ?? user.user_metadata?.first_name ?? null,
         traveler_last_name: profile?.last_name ?? user.user_metadata?.last_name ?? null,
         traveler_email: profile?.email ?? user.email ?? null,
@@ -108,7 +121,7 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
 
     if (bookingError || !booking) {
       setSubmitting(false);
-      setBookingMessage(bookingError?.message ?? "Could not create booking. Please try again.");
+      setBookingMessage(friendlyError(bookingError, "Could not create booking. Please try again."));
       return;
     }
 
@@ -116,15 +129,15 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
       booking_id: booking.id,
       user_id: user.id,
       amount_cents: dueNow,
-      method: paymentMethod === "proof" ? "eft" : "card",
+      method: "eft",
       status: "Pending",
-      provider: paymentMethod === "proof" ? "EFT" : "Card",
+      provider: "EFT",
       provider_reference: paymentReference.trim() || bookingRef,
     });
 
     if (paymentError) {
       setSubmitting(false);
-      setBookingMessage(paymentError.message);
+      setBookingMessage(friendlyError(paymentError, "Could not record your payment details. Please try again."));
       return;
     }
 
@@ -138,7 +151,7 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
 
       if (uploadError) {
         setSubmitting(false);
-        setBookingMessage(uploadError.message);
+        setBookingMessage(friendlyError(uploadError, "Could not upload your proof of payment. Please try again."));
         return;
       }
 
@@ -153,13 +166,13 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
 
       if (proofError) {
         setSubmitting(false);
-        setBookingMessage(proofError.message);
+        setBookingMessage(friendlyError(proofError, "Could not save your proof of payment. Please try again."));
         return;
       }
     }
 
     setSubmitting(false);
-    setBookingMessage(paymentMethod === "proof" ? "Proof submitted. Your booking is awaiting review." : "Booking created. Continue with card payment to confirm your seat.");
+    setBookingMessage("Proof submitted. Your booking is awaiting review.");
     setView("customer");
   };
 
@@ -180,8 +193,8 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
       <div className="container booking-layout">
         <section className="booking-flow">
           <header className="booking-head card">
-            <h1 className="font-display">Secure your trip in 3 quick steps</h1>
-            <p>Set travelers, choose pickup, review your details, then continue to secure checkout.</p>
+            <h1 className="font-display">Secure your trip in 4 quick steps</h1>
+            <p>Set travelers, review your booking, copy the bank details, then upload your EFT proof for review.</p>
             <nav className="booking-steps" aria-label="Booking steps">
               {steps.map((step, index) => (
                 <button key={step} className={index === activeStep ? "active" : ""} type="button" onClick={() => setActiveStep(index)}>
@@ -205,7 +218,8 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
                 <div className="booking-form-grid">
                   <label>
                     Travelers
-                    <input type="number" min="1" max={Math.max(trip.seatsRemaining, 1)} value={travelers} onChange={(event) => updateTravelers(Number(event.target.value))} />
+                    <input type="number" min="1" max={travelerLimit} value={travelers} onChange={(event) => updateTravelers(Number(event.target.value))} />
+                    <small>Maximum 8 travelers per booking: you plus up to 7 additional travelers.</small>
                   </label>
                   <label>
                     Payment option
@@ -231,7 +245,7 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
                   <section className="booking-companions">
                     <div>
                       <strong>Additional traveler names</strong>
-                      <span>Lead traveler is your account profile. Add the other traveler names below.</span>
+                      <span>Lead traveler is your account profile. Add up to 7 more traveler names below.</span>
                     </div>
                     {Array.from({ length: companionCount }).map((_, index) => (
                       <label key={index}>
@@ -255,75 +269,100 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
                   {companionCount > 0 ? <div><dt>Additional travelers</dt><dd>{companionNames.map((name) => name.trim()).filter(Boolean).join(", ") || "Names not completed"}</dd></div> : null}
                   <div><dt>Pickup point</dt><dd>{selectedPickupPoint}</dd></div>
                   <div><dt>Payment option</dt><dd>{paymentOption === "deposit" ? "Deposit only" : "Full payment"}</dd></div>
-                  <div><dt>Due now</dt><dd>{formatMoney(dueNow)}</dd></div>
+                  <div><dt>Due now</dt><dd>{formatTripMoney(dueNow)}</dd></div>
                 </dl>
                 <div className="booking-actions">
                   <button type="button" onClick={() => setActiveStep(0)}>Back</button>
-                  <button type="button" onClick={() => setActiveStep(2)}>Continue to payment</button>
+                  <button type="button" onClick={() => setActiveStep(2)}>Continue to bank details</button>
                 </div>
               </>
             ) : null}
 
             {activeStep === 2 ? (
               <>
-                <h2>3. Payment</h2>
-                <div className="booking-payment-methods" role="radiogroup" aria-label="Payment method">
-                  <button className={paymentMethod === "card" ? "active" : ""} type="button" onClick={() => setPaymentMethod("card")}>
-                    <CreditCard size={20} />
-                    <span>
-                      <strong>Pay immediately by card</strong>
-                      <small>Use secure card payment for instant confirmation.</small>
-                    </span>
-                  </button>
-                  <button className={paymentMethod === "proof" ? "active" : ""} type="button" onClick={() => setPaymentMethod("proof")}>
+                <h2>3. Banking details</h2>
+                <section className="booking-bank-card">
+                  <div className="booking-bank-card-top">
+                    <div>
+                      <span>Transfer destination</span>
+                      <strong>FNB business banking</strong>
+                    </div>
+                    <em>EFT preferred</em>
+                  </div>
+
+                  <div className="booking-bank-grid">
+                    {bankDetails.map((item) => (
+                      <article key={item.label} className="booking-bank-item">
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="booking-bank-reference">
+                    <span>Payment reference</span>
+                    <strong>{paymentReference.trim() || "Your full name + trip title"}</strong>
+                    <small>Use a reference that helps the team match your transfer quickly.</small>
+                  </div>
+                </section>
+
+                <div className="booking-payment-ready">
+                  <div>
+                    <strong>Amount to transfer now</strong>
+                    <span>{formatTripMoney(dueNow)} for {travelers} traveler{travelers === 1 ? "" : "s"}.</span>
+                  </div>
+                </div>
+
+                <div className="booking-actions">
+                  <button type="button" onClick={() => setActiveStep(1)}>Back</button>
+                  <button type="button" onClick={() => setActiveStep(3)}>I have the bank details</button>
+                </div>
+              </>
+            ) : null}
+
+            {activeStep === 3 ? (
+              <>
+                <h2>4. Payment proof</h2>
+                <div className="booking-payment-methods" aria-label="Payment method">
+                  <div className="active">
                     <FileUp size={20} />
                     <span>
                       <strong>Upload proof of payment</strong>
                       <small>Pay by EFT and upload your proof for review.</small>
                     </span>
-                  </button>
+                  </div>
                 </div>
 
-                {paymentMethod === "card" ? (
-                  <div className="booking-payment-ready">
-                    <CreditCard size={22} />
-                    <div>
-                      <strong>{formatMoney(dueNow)} due now</strong>
-                      <span>Continue to secure card checkout to complete your booking.</span>
-                    </div>
+                <div className="booking-proof-panel">
+                  <div className="booking-bank-details">
+                    <strong>EFT payment details</strong>
+                    <span>{priceNotice}</span>
                   </div>
-                ) : (
-                  <div className="booking-proof-panel">
-                    <div className="booking-bank-details">
-                      <strong>EFT payment details</strong>
-                      <span>Use your name and trip title as the payment reference.</span>
-                    </div>
-                    <label>
-                      Payment reference
-                      <input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Your name + trip title" />
-                    </label>
-                    <label className="booking-proof-upload">
-                      Proof of payment
-                      <span>
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0] ?? null;
-                            setProofFile(file);
-                            setProofFileName(file?.name ?? "");
-                          }}
-                        />
-                        <strong>Choose file</strong>
-                        <small>{proofFileName || "PDF, JPG or PNG"}</small>
-                      </span>
-                    </label>
-                  </div>
-                )}
+                  <label>
+                    Payment reference
+                    <input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Your name + trip title" />
+                  </label>
+                  <label className="booking-proof-upload">
+                    Proof of payment
+                    <span>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          setProofFile(file);
+                          setProofFileName(file?.name ?? "");
+                        }}
+                      />
+                      <strong>Choose file</strong>
+                      <small>{proofFileName || "PDF, JPG or PNG"}</small>
+                    </span>
+                  </label>
+                </div>
 
                 <div className="booking-actions">
-                  <button type="button" onClick={() => setActiveStep(1)}>Back</button>
-                  <button type="button" onClick={submitBooking} disabled={submitting}>{submitting ? "Submitting..." : paymentMethod === "card" ? "Pay by card" : "Submit proof"}</button>
+                  <button type="button" onClick={() => setActiveStep(2)}>Back</button>
+                  <button type="button" onClick={submitBooking} disabled={submitting}>{submitting ? "Submitting..." : "Submit proof"}</button>
                 </div>
                 {bookingMessage ? <p className="auth-message">{bookingMessage}</p> : null}
               </>
@@ -348,11 +387,11 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
             <span><Clock size={17} /> Pickup: {selectedPickupPoint}</span>
           </div>
           <dl className="booking-summary-totals">
-            <div><dt>Price per traveler</dt><dd>{formatMoney(trip.price)}</dd></div>
-            <div><dt>Deposit per traveler</dt><dd>{formatMoney(trip.deposit)}</dd></div>
-            <div className="due"><dt>Due now</dt><dd>{formatMoney(dueNow)}</dd></div>
+            <div><dt>Price per traveler</dt><dd>{formatTripMoney(trip.price)}</dd></div>
+            <div><dt>Deposit per traveler</dt><dd>{formatTripMoney(trip.deposit)}</dd></div>
+            <div className="due"><dt>Due now</dt><dd>{formatTripMoney(dueNow)}</dd></div>
           </dl>
-          <p><CheckCircle2 size={15} /> Summary updates as you change travelers, pickup, and payment mode.</p>
+          <p><CheckCircle2 size={15} /> {priceNotice}</p>
         </aside>
       </div>
     </main>

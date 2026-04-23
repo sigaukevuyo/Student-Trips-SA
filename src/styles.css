@@ -732,6 +732,16 @@ select {
   height: 0;
 }
 
+.invisible-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.invisible-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .ops-sidebar-profile {
   display: flex;
   align-items: center;
@@ -1040,10 +1050,34 @@ select {
   gap: 24px;
 }
 
+.footer-bottom-right {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
 .footer-bottom p {
   margin: 0;
   color: #44546a;
   font-size: 12px;
+}
+
+.footer-credit-line {
+  margin-top: 8px !important;
+}
+
+.footer-credit-link {
+  display: inline-flex;
+  align-items: center;
+  color: #071a2b;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: color 0.18s ease, opacity 0.18s ease;
+}
+
+.footer-credit-link:hover {
+  color: #a97714;
 }
 
 .footer-payments {
@@ -1086,6 +1120,11 @@ select {
   margin-right: 3px;
 }
 
+.footer-payment-badge-mastercard {
+  padding: 0;
+  overflow: hidden;
+}
+
 .footer-legal {
   display: flex;
   flex-wrap: wrap;
@@ -1097,6 +1136,14 @@ select {
   color: #39485c;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.footer-brand-note {
+  max-width: 380px;
+  color: #536174 !important;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
 }
 
 .floating-chat-button {
@@ -1168,17 +1215,22 @@ select {
     flex-direction: column;
   }
 
+  .footer-bottom-right,
+  .footer-legal {
+    justify-items: start;
+    justify-content: flex-start;
+  }
+
+  .footer-brand-note {
+    text-align: left;
+  }
+
   .footer-cta {
     align-items: flex-start;
     flex-direction: column;
     margin-block: 36px;
     padding: 30px;
   }
-
-  .footer-legal {
-    justify-content: flex-start;
-  }
-
   .ops-shell {
     grid-template-columns: 1fr;
   }

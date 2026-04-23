@@ -1,5 +1,7 @@
+import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 
+import { friendlyError } from "../../lib/friendlyError";
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 import { ThemeLoader } from "../../shared/components/ThemeLoader";
 import type { View } from "../../shared/navigation";
@@ -23,6 +25,52 @@ const initialForm: AuthFormState = {
   phone: "",
 };
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phonePattern = /^\+?[0-9\s()-]{7,20}$/;
+
+function getPasswordIssues(password: string) {
+  return [
+    password.length >= 8 ? "" : "at least 8 characters",
+    /[A-Z]/.test(password) ? "" : "one uppercase letter",
+    /[a-z]/.test(password) ? "" : "one lowercase letter",
+    /\d/.test(password) ? "" : "one number",
+  ].filter(Boolean);
+}
+
+function PasswordField({
+  label,
+  value,
+  onChange,
+  helper,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  helper?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <label>
+      {label}
+      <span className="auth-password-field">
+        <input
+          required
+          autoComplete="new-password"
+          minLength={8}
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? "Hide password" : "Show password"}>
+          {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </span>
+      {helper ? <small>{helper}</small> : null}
+    </label>
+  );
+}
+
 export function AuthScreen({
   mode,
   onLoggedIn,
@@ -35,6 +83,7 @@ export function AuthScreen({
   const [form, setForm] = useState<AuthFormState>(initialForm);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fieldNotice, setFieldNotice] = useState("");
   const redirectTo = `${window.location.origin}${window.location.pathname}`;
 
   const updateField = (field: keyof AuthFormState, value: string) => {
@@ -44,6 +93,7 @@ export function AuthScreen({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMessage("");
+    setFieldNotice("");
 
     if (!isSupabaseConfigured || !supabase) {
       setMessage("Account access is temporarily unavailable. Please try again shortly.");
@@ -52,16 +102,40 @@ export function AuthScreen({
 
     setLoading(true);
 
+    const email = form.email.trim();
+    const phone = form.phone.trim();
+
+    if ((mode === "login" || mode === "register" || mode === "resetPassword") && !emailPattern.test(email)) {
+      setLoading(false);
+      setFieldNotice("Please enter a valid email address.");
+      return;
+    }
+
+    if (mode === "register" && phone && !phonePattern.test(phone)) {
+      setLoading(false);
+      setFieldNotice("Please enter a valid phone number, for example +27 79 707 5710.");
+      return;
+    }
+
+    if (mode === "register" || mode === "updatePassword") {
+      const passwordIssues = getPasswordIssues(form.password);
+      if (passwordIssues.length > 0) {
+        setLoading(false);
+        setFieldNotice(`Password must include ${passwordIssues.join(", ")}.`);
+        return;
+      }
+    }
+
     if (mode === "login") {
       const { error } = await supabase.auth.signInWithPassword({
-        email: form.email.trim(),
+        email,
         password: form.password,
       });
 
       setLoading(false);
 
       if (error) {
-        setMessage(error.message);
+        setMessage(friendlyError(error, "We could not log you in. Please try again."));
         return;
       }
 
@@ -72,14 +146,14 @@ export function AuthScreen({
 
     if (mode === "register") {
       const { data, error } = await supabase.auth.signUp({
-        email: form.email.trim(),
+        email,
         password: form.password,
         options: {
           emailRedirectTo: redirectTo,
           data: {
             first_name: form.firstName.trim(),
             last_name: form.lastName.trim(),
-            phone: form.phone.trim(),
+            phone,
           },
         },
       });
@@ -87,7 +161,7 @@ export function AuthScreen({
       setLoading(false);
 
       if (error) {
-        setMessage(error.message);
+        setMessage(friendlyError(error, "We could not create your account. Please try again."));
         return;
       }
 
@@ -109,7 +183,7 @@ export function AuthScreen({
       setLoading(false);
 
       if (error) {
-        setMessage(error.message);
+        setMessage(friendlyError(error, "We could not update your password. Please try again."));
         return;
       }
 
@@ -119,13 +193,13 @@ export function AuthScreen({
       return;
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(form.email.trim(), {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo,
     });
     setLoading(false);
 
     if (error) {
-      setMessage(error.message);
+      setMessage(friendlyError(error, "We could not send the reset link. Please try again."));
       return;
     }
 
@@ -157,23 +231,26 @@ export function AuthScreen({
           <div className="auth-grid">
             <label>
               Email
-              <input required type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} />
+              <input required autoComplete="email" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder="name@example.com" />
             </label>
             <label>
               Phone
-              <input value={form.phone} onChange={(event) => updateField("phone", event.target.value)} />
+              <input autoComplete="tel" type="tel" value={form.phone} onChange={(event) => updateField("phone", event.target.value)} placeholder="+27 79 707 5710" />
+              <small>Use a reachable WhatsApp or mobile number.</small>
             </label>
           </div>
 
-          <label>
-            Password
-            <input required minLength={8} type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} />
-            <small>Minimum 8 characters, including uppercase and a number.</small>
-          </label>
+          <PasswordField
+            label="Password"
+            value={form.password}
+            onChange={(value) => updateField("password", value)}
+            helper="Minimum 8 characters, with uppercase, lowercase, and a number."
+          />
 
           <button className="auth-submit" disabled={loading} type="submit">
             {loading ? <ThemeLoader label="Creating account" /> : "Create Account"}
           </button>
+          {fieldNotice ? <p className="auth-message warning">{fieldNotice}</p> : null}
           {message ? <p className="auth-message">{message}</p> : null}
           <p className="auth-switch">
             Already have an account?{" "}
@@ -195,12 +272,13 @@ export function AuthScreen({
 
           <label>
             Email
-            <input required type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} />
+            <input required autoComplete="email" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder="name@example.com" />
           </label>
 
           <button className="auth-submit" disabled={loading} type="submit">
             {loading ? <ThemeLoader label="Sending reset link" /> : "Send reset link"}
           </button>
+          {fieldNotice ? <p className="auth-message warning">{fieldNotice}</p> : null}
           {message ? <p className="auth-message">{message}</p> : null}
           <p className="auth-switch">
             Remembered your password?{" "}
@@ -220,15 +298,17 @@ export function AuthScreen({
           <h1 className="font-display">Set New Password</h1>
           <p>Create a new password for your Student Trips SA account.</p>
 
-          <label>
-            New Password
-            <input required minLength={8} type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} />
-            <small>Minimum 8 characters, including uppercase and a number.</small>
-          </label>
+          <PasswordField
+            label="New Password"
+            value={form.password}
+            onChange={(value) => updateField("password", value)}
+            helper="Minimum 8 characters, with uppercase, lowercase, and a number."
+          />
 
           <button className="auth-submit" disabled={loading} type="submit">
             {loading ? <ThemeLoader label="Updating password" /> : "Update password"}
           </button>
+          {fieldNotice ? <p className="auth-message warning">{fieldNotice}</p> : null}
           {message ? <p className="auth-message">{message}</p> : null}
         </form>
       </main>
@@ -243,13 +323,10 @@ export function AuthScreen({
 
         <label>
           Email
-          <input required type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} />
+          <input required autoComplete="email" type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder="name@example.com" />
         </label>
 
-        <label>
-          Password
-          <input required type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} />
-        </label>
+        <PasswordField label="Password" value={form.password} onChange={(value) => updateField("password", value)} />
 
         <button className="auth-forgot" type="button" onClick={() => setView("resetPassword")}>
           Forgot password?
@@ -258,6 +335,7 @@ export function AuthScreen({
         <button className="auth-submit" disabled={loading} type="submit">
           {loading ? <ThemeLoader label="Logging in" /> : "Log In"}
         </button>
+        {fieldNotice ? <p className="auth-message warning">{fieldNotice}</p> : null}
         {message ? <p className="auth-message">{message}</p> : null}
         <p className="auth-switch">
           No account yet?{" "}

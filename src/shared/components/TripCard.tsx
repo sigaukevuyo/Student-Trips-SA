@@ -1,7 +1,8 @@
 import { CalendarDays, Heart, MapPin, Sparkles, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { formatDate, formatMoney } from "../../lib/data";
+import { useCurrency } from "../../lib/currency";
+import { formatDate } from "../../lib/data";
 import { supabase } from "../../lib/supabase";
 import { getTripBadges } from "../../lib/tripBadges";
 import type { Trip } from "../../lib/types";
@@ -13,6 +14,7 @@ export function TripCard({
   hideCityAction = false,
   initialSaved = false,
   onFavoriteChange,
+  onViewCityTrips,
   onViewTrip,
 }: {
   trip: Trip;
@@ -20,8 +22,10 @@ export function TripCard({
   hideCityAction?: boolean;
   initialSaved?: boolean;
   onFavoriteChange?: (trip: Trip, saved: boolean) => void;
+  onViewCityTrips?: (trip: Trip) => void;
   onViewTrip?: (trip: Trip) => void;
 }) {
+  const { formatTripMoney, priceNotice } = useCurrency();
   const nearlyFull = trip.status === "NEARLY_FULL";
   const soldOut = trip.status === "SOLD_OUT";
   const badges = getTripBadges(trip);
@@ -143,13 +147,13 @@ export function TripCard({
             <Users size={15} />
             {trip.seatsRemaining} seats left
           </span>
-          <strong>From {formatMoney(trip.price)}</strong>
-          <strong>Deposit {formatMoney(trip.deposit)}</strong>
+          <strong>From {formatTripMoney(trip.price)}</strong>
+          <strong>Deposit {formatTripMoney(trip.deposit)}</strong>
         </div>
-        <p className="trip-currency-note">Charged in ZAR at checkout.</p>
+        <p className="trip-currency-note">{priceNotice}</p>
         <div className="trip-card-actions">
           <button type="button" onClick={() => onViewTrip?.(trip)}>View Trip</button>
-          {!hideCityAction ? <button type="button">See city trips</button> : null}
+          {!hideCityAction ? <button type="button" onClick={() => onViewCityTrips?.(trip)}>See city trips</button> : null}
         </div>
       </div>
     </article>

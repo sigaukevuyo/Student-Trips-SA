@@ -1,17 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { dbTripToTrip, tripSelect, type DbCity, type DbTrip } from "../../lib/db";
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
 import { ThemeLoader } from "../../shared/components/ThemeLoader";
 import { TripCard } from "../../shared/components/TripCard";
+import type { TripFilters } from "../../App";
 import type { View } from "../../shared/navigation";
 import "./TripsScreen.css";
 
-export function TripsScreen({ setSelectedTrip, setView }: { setSelectedTrip: (trip: Trip) => void; setView: (view: View) => void }) {
-  const [query, setQuery] = useState("");
-  const [city, setCity] = useState("");
-  const [tag, setTag] = useState("");
+export function TripsScreen({
+  initialFilters,
+  onViewCityTrips,
+  setSelectedTrip,
+  setView,
+}: {
+  initialFilters?: TripFilters;
+  onViewCityTrips: (trip: Trip) => void;
+  setSelectedTrip: (trip: Trip) => void;
+  setView: (view: View) => void;
+}) {
+  const [query, setQuery] = useState(initialFilters?.query ?? "");
+  const [city, setCity] = useState(initialFilters?.city ?? "");
+  const [category, setCategory] = useState(initialFilters?.category ?? "");
   const [cities, setCities] = useState<DbCity[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +47,7 @@ export function TripsScreen({ setSelectedTrip, setView }: { setSelectedTrip: (tr
       if (!mounted) return;
 
       if (cityResult.error || tripResult.error) {
-        setError(cityResult.error?.message ?? tripResult.error?.message ?? "Could not load trips.");
+        setError(friendlyError(cityResult.error ?? tripResult.error, "Could not load trips."));
       }
 
       setCities((cityResult.data as DbCity[] | null) ?? []);
@@ -50,17 +62,23 @@ export function TripsScreen({ setSelectedTrip, setView }: { setSelectedTrip: (tr
     };
   }, []);
 
-  const tags = useMemo(() => Array.from(new Set(trips.flatMap((trip) => trip.tags))).filter(Boolean), [trips]);
+  useEffect(() => {
+    setQuery(initialFilters?.query ?? "");
+    setCity(initialFilters?.city ?? "");
+    setCategory(initialFilters?.category ?? "");
+  }, [initialFilters?.category, initialFilters?.city, initialFilters?.query]);
+
+  const categories = useMemo(() => Array.from(new Set(trips.map((trip) => trip.category))).filter(Boolean), [trips]);
 
   const filteredTrips = useMemo(
     () =>
       trips.filter((trip) => {
         const matchesQuery = `${trip.title} ${trip.summary} ${trip.category}`.toLowerCase().includes(query.toLowerCase());
         const matchesCity = !city || trip.city === city;
-        const matchesTag = !tag || trip.tags.some((item) => item.toLowerCase().includes(tag.toLowerCase()));
-        return matchesQuery && matchesCity && matchesTag;
+        const matchesCategory = !category || trip.category === category;
+        return matchesQuery && matchesCity && matchesCategory;
       }),
-    [city, query, tag, trips],
+    [category, city, query, trips],
   );
 
   return (
@@ -86,10 +104,10 @@ export function TripsScreen({ setSelectedTrip, setView }: { setSelectedTrip: (tr
           </select>
         </label>
         <label>
-          Quick tag
-          <select value={tag} onChange={(event) => setTag(event.target.value)}>
-            <option value="">All tags</option>
-            {tags.map((item) => (
+          Trip type
+          <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            <option value="">All trip types</option>
+            {categories.map((item) => (
               <option key={item}>{item}</option>
             ))}
           </select>
@@ -103,10 +121,15 @@ export function TripsScreen({ setSelectedTrip, setView }: { setSelectedTrip: (tr
 
       <div className="trip-grid">
         {filteredTrips.map((trip) => (
-          <TripCard key={trip.id} trip={trip} onViewTrip={(selectedTrip) => {
-            setSelectedTrip(selectedTrip);
-            setView("tripDetail");
-          }} />
+          <TripCard
+            key={trip.id}
+            trip={trip}
+            onViewCityTrips={onViewCityTrips}
+            onViewTrip={(selectedTrip) => {
+              setSelectedTrip(selectedTrip);
+              setView("tripDetail");
+            }}
+          />
         ))}
       </div>
     </main>

@@ -1,12 +1,71 @@
 .home-announcement {
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-bottom: 1px solid #dde4eb;
-  background: #f6f9fc;
-  color: #071a2b;
+  position: relative;
+  z-index: 4;
+  height: 32px;
+  overflow: hidden;
+  border-block: 1px solid #e5dfd0;
+  background: #fbf8ef;
+  color: var(--primary);
+  box-shadow: 0 8px 22px rgba(7, 26, 43, 0.05);
+  white-space: nowrap;
+}
+
+.home-announcement::before,
+.home-announcement::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 70px;
+  pointer-events: none;
+}
+
+.home-announcement::before {
+  left: 0;
+  background: linear-gradient(90deg, #fbf8ef, rgba(251, 248, 239, 0));
+}
+
+.home-announcement::after {
+  right: 0;
+  background: linear-gradient(270deg, #fbf8ef, rgba(251, 248, 239, 0));
+}
+
+.home-announcement-track {
+  display: inline-flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 44px;
+  height: 100%;
+  padding-left: 24px;
+  animation: home-announcement-marquee 32s linear infinite;
+}
+
+.home-announcement-track span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--primary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.home-announcement-track span::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(212, 170, 53, 0.18);
+}
+
+@keyframes home-announcement-marquee {
+  to {
+    transform: translateX(-25%);
+  }
 }
 
 .home-hero {

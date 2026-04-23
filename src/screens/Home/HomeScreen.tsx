@@ -2,12 +2,15 @@ import { CalendarCheck, Globe2, MapPin, Search, ShieldCheck, Sparkles, Star, Use
 import { useEffect, useState } from "react";
 
 import { dbTripToTrip, tripSelect, type DbCity, type DbTrip } from "../../lib/db";
-import { formatDate, formatMoney } from "../../lib/data";
+import { useCurrency } from "../../lib/currency";
+import { formatDate } from "../../lib/data";
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import { getTripBadges } from "../../lib/tripBadges";
 import type { Trip } from "../../lib/types";
 import { Button } from "../../shared/components/Button";
 import { ThemeLoader } from "../../shared/components/ThemeLoader";
+import type { TripFilters } from "../../App";
 import type { View } from "../../shared/navigation";
 import "./HomeScreen.css";
 
@@ -16,6 +19,11 @@ type Review = {
   quote: string;
   author_name: string;
   rating: number;
+};
+
+type HomeUpdate = {
+  id: string;
+  body: string;
 };
 
 const values = [
@@ -35,10 +43,25 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
-export function HomeScreen({ setSelectedTrip, setView }: { setSelectedTrip: (trip: Trip) => void; setView: (view: View) => void }) {
+export function HomeScreen({
+  onTripSearch,
+  onViewCityTrips,
+  setSelectedTrip,
+  setView,
+}: {
+  onTripSearch: (filters: TripFilters) => void;
+  onViewCityTrips: (trip: Trip) => void;
+  setSelectedTrip: (trip: Trip) => void;
+  setView: (view: View) => void;
+}) {
+  const { formatTripMoney, priceNotice } = useCurrency();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchCity, setSearchCity] = useState("");
+  const [searchCategory, setSearchCategory] = useState("");
   const [cities, setCities] = useState<(DbCity & { tripCount: number })[]>([]);
   const [featuredTrips, setFeaturedTrips] = useState<Trip[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [latestUpdate, setLatestUpdate] = useState<HomeUpdate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -52,21 +75,23 @@ export function HomeScreen({ setSelectedTrip, setView }: { setSelectedTrip: (tri
         return;
       }
 
-      const [cityResult, tripResult, reviewResult] = await Promise.all([
+      const [cityResult, tripResult, reviewResult, updateResult] = await Promise.all([
         supabase.from("cities").select("id,slug,name,province,image_url,tagline,support_email,support_phone,trips(count)").eq("active", true).order("name").limit(6),
         supabase.from("trips").select(tripSelect).eq("published", true).order("created_at", { ascending: false }).limit(3),
         supabase.from("reviews").select("id,quote,author_name,rating").eq("published", true).order("created_at", { ascending: false }).limit(6),
+        supabase.from("updates").select("id,body").eq("published", true).order("published_on", { ascending: false }).limit(1).maybeSingle(),
       ]);
 
       if (!mounted) return;
 
-      if (cityResult.error || tripResult.error || reviewResult.error) {
-        setError(cityResult.error?.message ?? tripResult.error?.message ?? reviewResult.error?.message ?? "Could not load home content.");
+      if (cityResult.error || tripResult.error || reviewResult.error || updateResult.error) {
+        setError(friendlyError(cityResult.error ?? tripResult.error ?? reviewResult.error ?? updateResult.error, "Could not load home content."));
       }
 
       setCities(((cityResult.data as unknown as DbCity[] | null) ?? []).map((city) => ({ ...city, tripCount: city.trips?.[0]?.count ?? 0 })));
       setFeaturedTrips(((tripResult.data as unknown as DbTrip[] | null) ?? []).map(dbTripToTrip));
       setReviews((reviewResult.data as Review[] | null) ?? []);
+      setLatestUpdate((updateResult.data as HomeUpdate | null) ?? null);
       setLoading(false);
     }
 
@@ -77,10 +102,31 @@ export function HomeScreen({ setSelectedTrip, setView }: { setSelectedTrip: (tri
     };
   }, []);
 
+  function exploreDepartures() {
+    onTripSearch({
+      query: searchQuery.trim(),
+      city: searchCity,
+      category: searchCategory,
+    });
+    setView("trips");
+  }
+
   return (
     <>
+      {latestUpdate?.body ? (
+        <div className="home-announcement" aria-label="Latest update">
+          <div className="home-announcement-track">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <span key={index} aria-hidden={index > 0}>
+                {latestUpdate.body}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <section className="home-hero">
-        <img src="/assets/Hero Img.png" alt="Students enjoying a group trip" />
+        <img src="/assets/Hero Img.jpeg" alt="Students enjoying a group trip" />
         <div className="home-hero-overlay" />
         <div className="container home-hero-content">
           <span className="home-hero-chip">Student Trips SA</span>
@@ -104,28 +150,30 @@ export function HomeScreen({ setSelectedTrip, setView }: { setSelectedTrip: (tri
             Search destination, vibe, or trip name
             <div className="input-icon">
               <Search size={15} />
-              <input placeholder="Search destination, vibe, or trip name" />
+              <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => {
+                if (event.key === "Enter") exploreDepartures();
+              }} placeholder="Search destination, vibe, or trip name" />
             </div>
           </label>
           <label>
             City
-            <select defaultValue="">
+            <select value={searchCity} onChange={(event) => setSearchCity(event.target.value)}>
               <option value="">All cities</option>
               {cities.map((city) => (
-                <option key={city.id}>{city.name}</option>
+                <option key={city.id} value={city.name}>{city.name}</option>
               ))}
             </select>
           </label>
           <label>
             Trip type
-            <select defaultValue="">
+            <select value={searchCategory} onChange={(event) => setSearchCategory(event.target.value)}>
               <option value="">All trip types</option>
               {Array.from(new Set(featuredTrips.map((trip) => trip.category))).map((category) => (
-                <option key={category}>{category}</option>
+                <option key={category} value={category}>{category}</option>
               ))}
             </select>
           </label>
-          <Button onClick={() => setView("trips")}>Explore Departures</Button>
+          <Button onClick={exploreDepartures}>Explore Departures</Button>
         </div>
       </section>
 
@@ -172,16 +220,16 @@ export function HomeScreen({ setSelectedTrip, setView }: { setSelectedTrip: (tri
                 <div className="home-trip-facts">
                   <span>{formatDate(trip.startDate)}</span>
                   <span>{trip.seatsRemaining} seats left</span>
-                  <strong>From {formatMoney(trip.price)}</strong>
-                  <strong>Deposit {formatMoney(trip.deposit)}</strong>
+                  <strong>From {formatTripMoney(trip.price)}</strong>
+                  <strong>Deposit {formatTripMoney(trip.deposit)}</strong>
                 </div>
-                <p className="home-trip-currency">Charged in ZAR at checkout.</p>
+                <p className="home-trip-currency">{priceNotice}</p>
                 <div className="home-trip-actions">
                   <button type="button" onClick={() => {
                     setSelectedTrip(trip);
                     setView("tripDetail");
                   }}>View Trip</button>
-                  <button type="button" onClick={() => setView("cities")}>See city trips</button>
+                  <button type="button" onClick={() => onViewCityTrips(trip)}>See city trips</button>
                 </div>
               </div>
             </article>

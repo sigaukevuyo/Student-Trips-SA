@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import { ThemeLoader } from "../../shared/components/ThemeLoader";
 import type { View } from "../../shared/navigation";
@@ -28,6 +29,8 @@ const initialForm: OnboardingFormState = {
   dietaryRequirements: "",
   medicalNotes: "",
 };
+
+const phonePattern = /^\+?[0-9\s()-]{7,20}$/;
 
 type ProfileRow = {
   date_of_birth: string | null;
@@ -84,7 +87,7 @@ export function OnboardingScreen({ setView }: { setView: (view: View) => void })
       if (!mounted) return;
 
       if (error) {
-        setMessage(error.message);
+        setMessage(friendlyError(error, "We could not load your profile right now. Please try again."));
       }
 
       const profile = data as ProfileRow | null;
@@ -126,6 +129,11 @@ export function OnboardingScreen({ setView }: { setView: (view: View) => void })
       return;
     }
 
+    if (!phonePattern.test(form.emergencyContactPhone.trim())) {
+      setMessage("Please enter a valid emergency contact phone number, for example +27 82 999 002.");
+      return;
+    }
+
     setSaving(true);
 
     const {
@@ -158,7 +166,7 @@ export function OnboardingScreen({ setView }: { setView: (view: View) => void })
     setSaving(false);
 
     if (error) {
-      setMessage(error.message);
+      setMessage(friendlyError(error, "We could not save your profile right now. Please try again."));
       return;
     }
 
@@ -175,7 +183,7 @@ export function OnboardingScreen({ setView }: { setView: (view: View) => void })
         <div className="onboarding-head">
           <span className="eyebrow dark">{isEditingProfile ? "Profile" : "Onboarding"}</span>
           <h1 className="font-display">{isEditingProfile ? "Edit traveler profile" : "Complete your traveler profile"}</h1>
-          <p>{isEditingProfile ? "Update the details used for trip check-in, campus lists, and emergency support." : "These details help the team verify your identity, prepare campus pickup lists, and support you during a trip."}</p>
+          <p>{isEditingProfile ? "Update the details used for trip check-in, university lists, and emergency support." : "These details help the team verify your identity, prepare university pickup lists, and support you during a trip."}</p>
         </div>
 
         {loading ? (
@@ -208,17 +216,19 @@ export function OnboardingScreen({ setView }: { setView: (view: View) => void })
                 </label>
                 <label>
                   Student Number
-                  <input required value={form.studentNumber} onChange={(event) => updateField("studentNumber", event.target.value)} placeholder="STD-1001" />
+                  <input value={form.studentNumber} onChange={(event) => updateField("studentNumber", event.target.value)} placeholder="STD-1001 or N/A" />
+                  <small>Optional. Type N/A if not applicable.</small>
                 </label>
               </div>
             </section>
 
             <section className="onboarding-section">
-              <h2>Campus & emergency contact</h2>
+              <h2>University & emergency contact</h2>
               <div className="onboarding-grid">
                 <label>
-                  Campus
-                  <input required value={form.campus} onChange={(event) => updateField("campus", event.target.value)} placeholder="UCT" />
+                  University Name
+                  <input value={form.campus} onChange={(event) => updateField("campus", event.target.value)} placeholder="UCT or N/A" />
+                  <small>Optional. Type N/A if not applicable.</small>
                 </label>
                 <label>
                   Emergency Contact Name
@@ -228,6 +238,7 @@ export function OnboardingScreen({ setView }: { setView: (view: View) => void })
               <label>
                 Emergency Contact Phone
                 <input required type="tel" value={form.emergencyContactPhone} onChange={(event) => updateField("emergencyContactPhone", event.target.value)} placeholder="+27 82 999 002" />
+                <small>Use a valid phone number with country code where possible.</small>
               </label>
             </section>
 

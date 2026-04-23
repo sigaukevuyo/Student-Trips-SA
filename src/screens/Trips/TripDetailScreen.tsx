@@ -1,7 +1,8 @@
 import { CalendarDays, CheckCircle2, MapPin, Ticket, Users } from "lucide-react";
 import { useState } from "react";
 
-import { formatDate, formatMoney } from "../../lib/data";
+import { useCurrency } from "../../lib/currency";
+import { formatDate } from "../../lib/data";
 import type { Trip } from "../../lib/types";
 import type { View } from "../../shared/navigation";
 import "./TripDetailScreen.css";
@@ -10,6 +11,7 @@ const detailTabs = ["Overview", "Full Itinerary", "Tour Details"];
 
 export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView: (view: View) => void }) {
   const [activeTab, setActiveTab] = useState("Overview");
+  const { formatTripMoney, priceNotice } = useCurrency();
 
   if (!trip) {
     return (
@@ -26,7 +28,7 @@ export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView
   const soldOut = trip.status === "SOLD_OUT";
   const nearlyFull = trip.status === "NEARLY_FULL";
   const bookingDeadline = formatDate(trip.startDate);
-  const pickupPoints = trip.pickupPoints.length > 0 ? trip.pickupPoints : ["Main campus pickup"];
+  const pickupPoints = trip.pickupPoints.length > 0 ? trip.pickupPoints : ["Main university pickup"];
 
   return (
     <main className="trip-detail-page">
@@ -112,7 +114,7 @@ export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView
                 <p>Core details may vary by departure, but this trip is planned around student-friendly timing, support, and clear payment steps.</p>
                 <span><CheckCircle2 size={16} /> Group coordination</span>
                 <span><CheckCircle2 size={16} /> Secure deposit option</span>
-                <span><CheckCircle2 size={16} /> Campus-ready communication</span>
+                <span><CheckCircle2 size={16} /> University-ready communication</span>
               </div>
             ) : null}
           </section>
@@ -122,8 +124,8 @@ export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView
           <section className="card trip-booking-card">
             <h2>Book This Trip</h2>
             <dl>
-              <div><dt>From price</dt><dd>{formatMoney(trip.price)}</dd></div>
-              <div><dt>Deposit option</dt><dd>{formatMoney(trip.deposit)}</dd></div>
+              <div><dt>From price</dt><dd>{formatTripMoney(trip.price)}</dd></div>
+              <div><dt>Deposit option</dt><dd>{formatTripMoney(trip.deposit)}</dd></div>
               <div><dt>Seats remaining</dt><dd>{trip.seatsRemaining}</dd></div>
             </dl>
             <label>
@@ -135,7 +137,7 @@ export function TripDetailScreen({ trip, setView }: { trip: Trip | null; setView
               </select>
             </label>
             <button type="button" disabled={soldOut} onClick={() => setView("booking")}>{soldOut ? "Sold Out" : "Book Now"}</button>
-            <p>Pay in full, secure with a deposit, or upload EFT proof.</p>
+            <p>{priceNotice}</p>
           </section>
 
           <section className="card trip-help-card">

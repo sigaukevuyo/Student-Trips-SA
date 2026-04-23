@@ -1,8 +1,10 @@
 import { CalendarDays, CheckCircle2, ChevronRight, HelpCircle, LockKeyhole, Mail, MapPin, Settings, ShieldCheck, Ticket, Trash2, UserRound, Wallet, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { formatDate, formatMoney } from "../../lib/data";
+import { useCurrency } from "../../lib/currency";
+import { formatDate } from "../../lib/data";
 import { dbTripToTrip, tripSelect, type DbTrip } from "../../lib/db";
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
 import { Button } from "../../shared/components/Button";
@@ -81,7 +83,16 @@ function getCancellationState(booking: DashboardBooking) {
   return { canCancel: true, message: "Cancelling this unpaid booking will release the reservation." };
 }
 
-export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: (trip: Trip) => void; setView: (view: View) => void }) {
+export function CustomerScreen({
+  onViewCityTrips,
+  setSelectedTrip,
+  setView,
+}: {
+  onViewCityTrips: (trip: Trip) => void;
+  setSelectedTrip: (trip: Trip) => void;
+  setView: (view: View) => void;
+}) {
+  const { formatTripMoney, priceNotice } = useCurrency();
   const [activeTab, setActiveTab] = useState("Overview");
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [bookings, setBookings] = useState<DashboardBooking[]>([]);
@@ -157,7 +168,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
       }
 
       if (profileResult.error || bookingsResult.error || savedTripsResult.error || tripsResult.error) {
-        setError(profileResult.error?.message ?? bookingsResult.error?.message ?? savedTripsResult.error?.message ?? tripsResult.error?.message ?? "Could not load dashboard.");
+        setError(friendlyError(profileResult.error ?? bookingsResult.error ?? savedTripsResult.error ?? tripsResult.error, "Could not load dashboard."));
       }
 
       setProfile(
@@ -235,11 +246,11 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
       ],
     },
     {
-      title: "Contact & campus",
+      title: "Contact & university",
       items: [
         { label: "Email", value: profile?.email },
         { label: "Phone", value: profile?.phone },
-        { label: "Campus", value: profile?.campus },
+        { label: "University", value: profile?.campus },
         { label: "Student number", value: profile?.student_number },
       ],
     },
@@ -279,7 +290,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
     setBookingActionLoading("");
 
     if (cancelError) {
-      setBookingActionMessage(cancelError.message);
+      setBookingActionMessage(friendlyError(cancelError, "Could not cancel this booking. Please try again."));
       return;
     }
 
@@ -304,7 +315,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
     setSettingsLoading("");
 
     if (resetError) {
-      setSettingsMessage(resetError.message);
+      setSettingsMessage(friendlyError(resetError, "Could not send the password reset link. Please try again."));
       return;
     }
 
@@ -335,7 +346,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
     setSettingsLoading("");
 
     if (deleteError) {
-      setSettingsMessage(deleteError.message);
+      setSettingsMessage(friendlyError(deleteError, "Could not delete this account right now. Please try again."));
       return;
     }
 
@@ -390,7 +401,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
                   </div>
                   <div className="customer-mini-stats">
                     <StatCard label="Bookings" value={String(activeBookings.length)} detail={nextBooking ? "Upcoming travel" : "None active"} />
-                    <StatCard label="Outstanding" value={formatMoney(payableOutstanding)} detail={`${needsPaymentCount} payment${needsPaymentCount === 1 ? "" : "s"}`} />
+                    <StatCard label="Outstanding" value={formatTripMoney(payableOutstanding)} detail={`${needsPaymentCount} payment${needsPaymentCount === 1 ? "" : "s"}`} />
                     <StatCard label="Profile" value={`${profilePercent}%`} detail={profilePercent >= 100 ? "Complete" : "Needs attention"} />
                   </div>
                 </section>
@@ -429,7 +440,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
                         {paymentBookings.slice(0, 2).map((booking) => (
                           <article key={booking.id} className="payment-box">
                             <strong>{booking.tripTitle}</strong>
-                            <span>Outstanding {formatMoney(booking.outstanding)}</span>
+                            <span>Outstanding {formatTripMoney(booking.outstanding)}</span>
                             <Button>Continue</Button>
                           </article>
                         ))}
@@ -468,7 +479,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
                   {dashboardTrips.length > 0 ? (
                     <div className="trip-grid">
                       {dashboardTrips.map((trip) => (
-                        <TripCard key={trip.id} trip={trip} initialSaved={savedTrips.some((item) => item.id === trip.id)} onFavoriteChange={handleFavoriteChange} onViewTrip={handleViewTrip} />
+                        <TripCard key={trip.id} trip={trip} initialSaved={savedTrips.some((item) => item.id === trip.id)} onFavoriteChange={handleFavoriteChange} onViewCityTrips={onViewCityTrips} onViewTrip={handleViewTrip} />
                       ))}
                     </div>
                   ) : (
@@ -571,7 +582,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
                 {savedTrips.length > 0 ? (
                   <div className="trip-grid">
                     {savedTrips.map((trip) => (
-                      <TripCard key={trip.id} trip={trip} initialSaved onFavoriteChange={handleFavoriteChange} onViewTrip={handleViewTrip} />
+                      <TripCard key={trip.id} trip={trip} initialSaved onFavoriteChange={handleFavoriteChange} onViewCityTrips={onViewCityTrips} onViewTrip={handleViewTrip} />
                     ))}
                   </div>
                 ) : (
@@ -595,14 +606,14 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
                     paymentBookings.map((booking) => (
                       <article key={booking.id} className="payment-box">
                         <strong>{booking.tripTitle}</strong>
-                        <span>Outstanding {formatMoney(booking.outstanding)}</span>
+                        <span>Outstanding {formatTripMoney(booking.outstanding)}</span>
                         <Button>Continue</Button>
                       </article>
                     ))
                   ) : (
                     <div className="customer-empty-inline clean">
                       <strong>No payments due</strong>
-                      <span>You are all clear right now.</span>
+                      <span>{priceNotice}</span>
                     </div>
                   )}
                 </div>
@@ -615,7 +626,7 @@ export function CustomerScreen({ setSelectedTrip, setView }: { setSelectedTrip: 
                   <div>
                     <span className="section-kicker">Profile review</span>
                     <h2 className="font-display">Traveler profile</h2>
-                    <p>Review the details used for trip check-in, campus lists, and emergency support.</p>
+                    <p>Review the details used for trip check-in, university lists, and emergency support.</p>
                   </div>
                   <span className="customer-percent">{profilePercent}%</span>
                 </div>

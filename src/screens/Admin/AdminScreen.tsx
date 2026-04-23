@@ -1,8 +1,9 @@
-import { BarChart3, Building2, CreditCard, FileCheck2, MessageSquare, Newspaper, Users } from "lucide-react";
+import { BarChart3, Building2, CreditCard, FileCheck2, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { formatDate, formatMoney } from "../../lib/data";
 import { deriveTripStatus } from "../../lib/db";
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import { Button } from "../../shared/components/Button";
 import { StatCard } from "../../shared/components/StatCard";
@@ -11,7 +12,7 @@ import { ThemeLoader } from "../../shared/components/ThemeLoader";
 import { RoleShell } from "../../shared/layout/RoleShell";
 import "./AdminScreen.css";
 
-const adminTabs = ["Overview", "Bookings", "Customers", "Cities", "Trips", "Payments", "Inquiries", "Updates", "Reviews"];
+const adminTabs = ["Overview", "Branch Manager", "Bookings", "Users", "Cities", "Trips", "Payments", "Inquiries", "Updates", "Reviews"];
 const adminAssetBucket = "student-trip-assets";
 const adminTabStorageKey = "student-trips:admin-tab";
 const activeBookingStatuses = new Set(["Pending Payment", "Awaiting Proof", "Waitlisted", "Confirmed"]);
@@ -29,6 +30,7 @@ function getSavedAdminTab() {
 type AdminProfile = {
   id: string;
   role: "customer" | "branch" | "admin";
+  branch_city_id: string | null;
   first_name: string | null;
   last_name: string | null;
   email: string | null;
@@ -37,6 +39,7 @@ type AdminProfile = {
   organisation: string | null;
   profile_complete_percent: number | null;
   created_at: string;
+  cities?: { name: string | null } | null;
 };
 
 type AdminCity = {
@@ -121,16 +124,6 @@ type PartnerInquiry = {
   created_at: string;
 };
 
-type ContactInquiry = {
-  id: string;
-  name: string | null;
-  email: string;
-  phone: string | null;
-  subject: string | null;
-  message: string;
-  created_at: string;
-};
-
 type AdminUpdate = {
   id: string;
   title: string;
@@ -189,7 +182,6 @@ export function AdminScreen() {
   const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [proofs, setProofs] = useState<AdminProof[]>([]);
   const [partnerInquiries, setPartnerInquiries] = useState<PartnerInquiry[]>([]);
-  const [contactInquiries, setContactInquiries] = useState<ContactInquiry[]>([]);
   const [updates, setUpdates] = useState<AdminUpdate[]>([]);
   const [reviews, setReviews] = useState<AdminReview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,9 +190,15 @@ export function AdminScreen() {
   const [editingValues, setEditingValues] = useState<Record<string, string | boolean>>({});
   const [showCityModal, setShowCityModal] = useState(false);
   const [showTripModal, setShowTripModal] = useState(false);
+  const [showBranchManagerModal, setShowBranchManagerModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [editingCityId, setEditingCityId] = useState("");
   const [editingTripId, setEditingTripId] = useState("");
+  const [editingProfileId, setEditingProfileId] = useState("");
+  const [editingBranchManagerId, setEditingBranchManagerId] = useState("");
+  const [editingUpdateId, setEditingUpdateId] = useState("");
   const [editingReviewId, setEditingReviewId] = useState("");
   const [cityForm, setCityForm] = useState({
     name: "",
@@ -232,6 +230,27 @@ export function AdminScreen() {
     rating: "5",
     quote: "",
     trip_id: "",
+  });
+  const [updateForm, setUpdateForm] = useState({
+    title: "",
+    body: "",
+    published_on: new Date().toISOString().slice(0, 10),
+    published: true,
+  });
+  const [branchManagerForm, setBranchManagerForm] = useState({
+    email: "",
+    branch_city_id: "",
+    first_name: "",
+    last_name: "",
+    phone: "",
+  });
+  const [profileForm, setProfileForm] = useState({
+    first_name: "",
+    last_name: "",
+    phone: "",
+    campus: "",
+    organisation: "",
+    role: "customer",
   });
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [error, setError] = useState("");
@@ -268,19 +287,17 @@ export function AdminScreen() {
       paymentResult,
       proofResult,
       partnerResult,
-      contactResult,
       updateResult,
       reviewResult,
     ] = await Promise.all([
-      userId ? supabase.from("profiles").select("id,role,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at").eq("id", userId).maybeSingle() : Promise.resolve({ data: null, error: null }),
-      supabase.from("profiles").select("id,role,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at").order("created_at", { ascending: false }).limit(100),
+      userId ? supabase.from("profiles").select("id,role,branch_city_id,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at,cities(name)").eq("id", userId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      supabase.from("profiles").select("id,role,branch_city_id,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at,cities(name)").order("created_at", { ascending: false }).limit(100),
       supabase.from("cities").select("id,slug,name,province,active,support_email,support_phone,image_url,tagline,trips(count)").order("name"),
       supabase.from("trips").select("id,slug,title,category,image_url,summary,meeting_point,start_date,duration,price_cents,deposit_cents,capacity,seats_remaining,status,published,created_at,cities(id,name)").order("created_at", { ascending: false }).limit(100),
       supabase.from("bookings").select("id,user_id,booking_ref,status,total_cents,paid_cents,outstanding_cents,created_at,trips(title,cities(name))").order("created_at", { ascending: false }).limit(100),
       supabase.from("payments").select("id,amount_cents,method,status,provider,provider_reference,paid_at,created_at,bookings(booking_ref,status,trips(title))").order("created_at", { ascending: false }).limit(100),
       supabase.from("payment_proofs").select("id,booking_id,file_path,file_name,amount_cents,approved,created_at,bookings(booking_ref)").order("created_at", { ascending: false }).limit(100),
       supabase.from("partner_inquiries").select("id,inquiry_type,name,email,phone,organisation,campus,preferred_city,details,created_at").order("created_at", { ascending: false }).limit(100),
-      supabase.from("contact_inquiries").select("id,name,email,phone,subject,message,created_at").order("created_at", { ascending: false }).limit(100),
       supabase.from("updates").select("id,title,body,published_on,published,created_at").order("published_on", { ascending: false }).limit(100),
       supabase.from("reviews").select("id,trip_id,author_name,rating,quote,published,created_at,trips(title)").order("created_at", { ascending: false }).limit(100),
     ]);
@@ -294,12 +311,11 @@ export function AdminScreen() {
       paymentResult.error ??
       proofResult.error ??
       partnerResult.error ??
-      contactResult.error ??
       updateResult.error ??
       reviewResult.error;
 
     if (firstError) {
-      setError(firstError.message);
+      setError(friendlyError(firstError, "We could not load admin data right now. Please try again."));
     }
 
     setCurrentProfile((currentProfileResult.data as AdminProfile | null) ?? null);
@@ -310,7 +326,6 @@ export function AdminScreen() {
     setPayments((paymentResult.data as unknown as AdminPayment[] | null) ?? []);
     setProofs((proofResult.data as unknown as AdminProof[] | null) ?? []);
     setPartnerInquiries((partnerResult.data as PartnerInquiry[] | null) ?? []);
-    setContactInquiries((contactResult.data as ContactInquiry[] | null) ?? []);
     setUpdates((updateResult.data as AdminUpdate[] | null) ?? []);
     setReviews((reviewResult.data as unknown as AdminReview[] | null) ?? []);
     setLoading(false);
@@ -325,7 +340,7 @@ export function AdminScreen() {
     setSaving(`${table}-${id}`);
     const { error: updateError } = await supabase.from(table).update(values).eq("id", id);
     if (updateError) {
-      setError(updateError.message);
+      setError(friendlyError(updateError, "Could not save changes. Please try again."));
     } else {
       await loadAdmin();
       setSuccessMessage("Changes saved successfully.");
@@ -344,7 +359,7 @@ export function AdminScreen() {
     setSaving(`${pendingDelete.table}-delete-${pendingDelete.id}`);
     const { error: deleteError } = await supabase.from(pendingDelete.table).delete().eq("id", pendingDelete.id);
     if (deleteError) {
-      setError(deleteError.message);
+      setError(friendlyError(deleteError, "Could not delete this record. Please try again."));
     } else {
       if (editingKey.endsWith(pendingDelete.id)) {
         setEditingKey("");
@@ -362,7 +377,7 @@ export function AdminScreen() {
     setSaving(`profiles-${id}`);
     const { error: updateError } = await supabase.from("profiles").update({ role }).eq("id", id);
     if (updateError) {
-      setError(updateError.message);
+      setError(friendlyError(updateError, "Could not update this role. Please try again."));
     } else {
       await loadAdmin();
       setSuccessMessage("Role updated successfully.");
@@ -402,7 +417,13 @@ export function AdminScreen() {
   }
 
   function setTripFormValue(field: keyof typeof tripForm, value: string | boolean) {
-    setTripForm((current) => ({ ...current, [field]: value }));
+    setTripForm((current) => {
+      if (field === "title" && typeof value === "string" && (!current.slug || current.slug === slugify(current.title))) {
+        return { ...current, title: value, slug: slugify(value) };
+      }
+
+      return { ...current, [field]: value };
+    });
   }
 
   function resetTripForm() {
@@ -437,6 +458,96 @@ export function AdminScreen() {
       quote: "",
       trip_id: "",
     });
+  }
+
+  function setUpdateFormValue(field: keyof typeof updateForm, value: string | boolean) {
+    setUpdateForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function resetUpdateForm() {
+    setEditingUpdateId("");
+    setUpdateForm({
+      title: "",
+      body: "",
+      published_on: new Date().toISOString().slice(0, 10),
+      published: true,
+    });
+  }
+
+  function setBranchManagerFormValue(field: keyof typeof branchManagerForm, value: string) {
+    setBranchManagerForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function resetBranchManagerForm() {
+    setEditingBranchManagerId("");
+    setBranchManagerForm({
+      email: "",
+      branch_city_id: "",
+      first_name: "",
+      last_name: "",
+      phone: "",
+    });
+  }
+
+  function openBranchManagerForm(manager?: AdminProfile) {
+    if (manager) {
+      setEditingBranchManagerId(manager.id);
+      setBranchManagerForm({
+        email: manager.email ?? "",
+        branch_city_id: manager.branch_city_id ?? "",
+        first_name: manager.first_name ?? "",
+        last_name: manager.last_name ?? "",
+        phone: manager.phone ?? "",
+      });
+    } else {
+      resetBranchManagerForm();
+    }
+
+    setShowBranchManagerModal(true);
+  }
+
+  function setProfileFormValue(field: keyof typeof profileForm, value: string) {
+    setProfileForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function resetProfileForm() {
+    setEditingProfileId("");
+    setProfileForm({
+      first_name: "",
+      last_name: "",
+      phone: "",
+      campus: "",
+      organisation: "",
+      role: "customer",
+    });
+  }
+
+  function openProfileForm(profile: AdminProfile) {
+    setEditingProfileId(profile.id);
+    setProfileForm({
+      first_name: profile.first_name ?? "",
+      last_name: profile.last_name ?? "",
+      phone: profile.phone ?? "",
+      campus: profile.campus ?? "",
+      organisation: profile.organisation ?? "",
+      role: profile.role,
+    });
+    setShowProfileModal(true);
+  }
+
+  function openUpdateForm(update?: AdminUpdate) {
+    if (update) {
+      setEditingUpdateId(update.id);
+      setUpdateForm({
+        title: update.title,
+        body: update.body,
+        published_on: update.published_on,
+        published: update.published,
+      });
+    } else {
+      resetUpdateForm();
+    }
+    setShowUpdateModal(true);
   }
 
   function openCityForm(city?: AdminCity) {
@@ -533,7 +644,7 @@ export function AdminScreen() {
       });
 
     if (uploadError) {
-      setError(uploadError.message);
+      setError(friendlyError(uploadError, "Could not upload this image. Please try again."));
       return null;
     }
 
@@ -576,7 +687,7 @@ export function AdminScreen() {
       : await supabase.from("cities").insert(cityValues);
 
     if (insertError) {
-      setError(insertError.message);
+      setError(friendlyError(insertError, "Could not save this city. Please check the details and try again."));
     } else {
       setShowCityModal(false);
       resetCityForm();
@@ -648,7 +759,7 @@ export function AdminScreen() {
           : await supabase.from("trips").insert(legacyTripValues);
 
         if (legacyError) {
-          setError(legacyError.message);
+          setError(friendlyError(legacyError, "Could not save this trip. Please check the details and try again."));
         } else {
           setShowTripModal(false);
           resetTripForm();
@@ -656,7 +767,7 @@ export function AdminScreen() {
           setSuccessMessage(wasEditing ? "Trip updated successfully." : "Trip added successfully.");
         }
       } else {
-        setError(insertError.message);
+        setError(friendlyError(insertError, "Could not save this trip. Please check the details and try again."));
       }
     } else {
       setShowTripModal(false);
@@ -699,12 +810,120 @@ export function AdminScreen() {
       : await supabase.from("reviews").insert(reviewValues);
 
     if (insertError) {
-      setError(insertError.message);
+      setError(friendlyError(insertError, "Could not save this review. Please check the details and try again."));
     } else {
       setShowReviewModal(false);
       resetReviewForm();
       await loadAdmin();
       setSuccessMessage(wasEditing ? "Review updated successfully." : "Review added successfully.");
+    }
+    setSaving("");
+  }
+
+  async function createUpdate() {
+    if (!supabase) return;
+
+    const wasEditing = Boolean(editingUpdateId);
+    const title = updateForm.title.trim();
+    const body = updateForm.body.trim();
+
+    if (!title || !body || !updateForm.published_on) {
+      setError("Update title, body, and publish date are required.");
+      return;
+    }
+
+    setSaving(editingUpdateId ? `updates-${editingUpdateId}` : "updates-create");
+    const updateValues = {
+      title,
+      body,
+      published_on: updateForm.published_on,
+      published: updateForm.published,
+    };
+
+    const { error: insertError } = editingUpdateId
+      ? await supabase.from("updates").update(updateValues).eq("id", editingUpdateId)
+      : await supabase.from("updates").insert(updateValues);
+
+    if (insertError) {
+      setError(friendlyError(insertError, "Could not save this update. Please check the details and try again."));
+    } else {
+      setShowUpdateModal(false);
+      resetUpdateForm();
+      await loadAdmin();
+      setSuccessMessage(wasEditing ? "Update saved successfully." : "Update added successfully.");
+    }
+    setSaving("");
+  }
+
+  async function createBranchManager() {
+    if (!supabase) return;
+
+    const email = branchManagerForm.email.trim().toLowerCase();
+    const isEditing = Boolean(editingBranchManagerId);
+
+    if (!email) {
+      setError("Branch manager email is required.");
+      return;
+    }
+
+    if (!branchManagerForm.branch_city_id) {
+      setError("Please choose the city branch this manager belongs to.");
+      return;
+    }
+
+    setSaving(isEditing ? `branch-manager-${editingBranchManagerId}` : "branch-manager-create");
+    const assignmentValues = {
+      email,
+      branch_city_id: branchManagerForm.branch_city_id,
+      first_name: branchManagerForm.first_name.trim() || null,
+      last_name: branchManagerForm.last_name.trim() || null,
+      phone: branchManagerForm.phone.trim() || null,
+    };
+
+    const { error: assignmentError } = await supabase
+      .from("branch_manager_assignments")
+      .upsert(assignmentValues, { onConflict: "email" });
+
+    if (assignmentError) {
+      setError(friendlyError(assignmentError, "Could not save this branch manager assignment. Please try again."));
+      setSaving("");
+      return;
+    }
+
+    const profileQuery = supabase.from("profiles").select("id,email");
+    const { data: profile, error: profileError } = isEditing
+      ? await profileQuery.eq("id", editingBranchManagerId).maybeSingle()
+      : await profileQuery.ilike("email", email).maybeSingle();
+
+    if (profileError) {
+      setError(friendlyError(profileError, "Could not find or create this branch manager profile. Please try again."));
+      setSaving("");
+      return;
+    }
+
+    if (!profile) {
+      setShowBranchManagerModal(false);
+      resetBranchManagerForm();
+      setSuccessMessage("Branch manager assignment saved. When this email signs up, their role will become branch automatically.");
+      setSaving("");
+      return;
+    }
+
+    const values: Record<string, string> = { role: "branch", branch_city_id: branchManagerForm.branch_city_id };
+    (["first_name", "last_name", "phone"] as const).forEach((field) => {
+      const value = branchManagerForm[field].trim();
+      if (value) values[field] = value;
+    });
+
+    const { error: updateError } = await supabase.from("profiles").update(values).eq("id", profile.id);
+
+    if (updateError) {
+      setError(friendlyError(updateError, "Could not update this branch manager. Please try again."));
+    } else {
+      setShowBranchManagerModal(false);
+      resetBranchManagerForm();
+      await loadAdmin();
+      setSuccessMessage(isEditing ? "Branch manager updated successfully." : "Branch manager added successfully.");
     }
     setSaving("");
   }
@@ -746,7 +965,7 @@ export function AdminScreen() {
 
     if (proofError) {
       setSaving("");
-      setError(proofError.message);
+      setError(friendlyError(proofError, "Could not update this payment proof. Please try again."));
       return;
     }
 
@@ -757,7 +976,7 @@ export function AdminScreen() {
         .eq("id", proof.booking_id);
 
       if (bookingError) {
-        setError(bookingError.message);
+        setError(friendlyError(bookingError, "Could not update this booking. Please try again."));
       } else {
         await loadAdmin();
         setSuccessMessage("Payment proof rejected.");
@@ -775,7 +994,7 @@ export function AdminScreen() {
 
     if (bookingLoadError || !booking) {
       setSaving("");
-      setError(bookingLoadError?.message ?? "Could not load booking for this proof.");
+      setError(friendlyError(bookingLoadError, "Could not load booking for this proof."));
       return;
     }
 
@@ -791,7 +1010,7 @@ export function AdminScreen() {
 
     if (paymentError) {
       setSaving("");
-      setError(paymentError.message);
+      setError(friendlyError(paymentError, "Could not record this payment. Please try again."));
       return;
     }
 
@@ -801,7 +1020,7 @@ export function AdminScreen() {
       .eq("id", proof.booking_id);
 
     if (bookingError) {
-      setError(bookingError.message);
+      setError(friendlyError(bookingError, "Could not update this booking. Please try again."));
     } else {
       await loadAdmin();
       setSuccessMessage("Payment proof approved and booking updated.");
@@ -820,7 +1039,7 @@ export function AdminScreen() {
       .createSignedUrl(proof.file_path, 60 * 5);
 
     if (signedUrlError || !data?.signedUrl) {
-      setError(signedUrlError?.message ?? "Could not open payment proof.");
+      setError(friendlyError(signedUrlError, "Could not open payment proof."));
     } else {
       window.open(data.signedUrl, "_blank", "noopener,noreferrer");
     }
@@ -828,16 +1047,20 @@ export function AdminScreen() {
     setSaving("");
   }
 
-  async function saveProfile(id: string) {
-    await updateRecord("profiles", id, {
-      first_name: String(editingValues.first_name ?? "").trim() || null,
-      last_name: String(editingValues.last_name ?? "").trim() || null,
-      phone: String(editingValues.phone ?? "").trim() || null,
-      campus: String(editingValues.campus ?? "").trim() || null,
-      organisation: String(editingValues.organisation ?? "").trim() || null,
-      role: String(editingValues.role ?? "customer"),
+  async function saveProfileForm() {
+    if (!editingProfileId) return;
+
+    await updateRecord("profiles", editingProfileId, {
+      first_name: profileForm.first_name.trim() || null,
+      last_name: profileForm.last_name.trim() || null,
+      phone: profileForm.phone.trim() || null,
+      campus: profileForm.campus.trim() || null,
+      organisation: profileForm.organisation.trim() || null,
+      role: profileForm.role,
     });
-    cancelEdit();
+
+    setShowProfileModal(false);
+    resetProfileForm();
   }
 
   async function saveCity(id: string) {
@@ -847,16 +1070,6 @@ export function AdminScreen() {
       support_email: String(editingValues.support_email ?? "").trim() || null,
       support_phone: String(editingValues.support_phone ?? "").trim() || null,
       active: Boolean(editingValues.active),
-    });
-    cancelEdit();
-  }
-
-  async function saveUpdate(id: string) {
-    await updateRecord("updates", id, {
-      title: String(editingValues.title ?? "").trim(),
-      body: String(editingValues.body ?? "").trim(),
-      published_on: String(editingValues.published_on ?? ""),
-      published: Boolean(editingValues.published),
     });
     cancelEdit();
   }
@@ -879,6 +1092,7 @@ export function AdminScreen() {
   const unpublishedTrips = trips.filter((trip) => !trip.published).length;
   const nearlyFull = trips.filter((trip) => deriveTripStatus(trip.capacity, trip.seats_remaining) === "NEARLY_FULL").length;
   const profilesById = useMemo(() => Object.fromEntries(profiles.map((profile) => [profile.id, profile])), [profiles]);
+  const branchManagers = useMemo(() => profiles.filter((profile) => profile.role === "branch"), [profiles]);
   const maxCityTripCount = useMemo(() => Math.max(...cities.map((city) => city.tripCount), 1), [cities]);
   const activePayments = useMemo(
     () => payments.filter((payment) => !payment.bookings?.status || activeBookingStatuses.has(payment.bookings.status)),
@@ -943,6 +1157,40 @@ export function AdminScreen() {
         </>
       ) : null}
 
+      {!loading && !error && activeTab === "Branch Manager" ? (
+        <section className="card">
+          <div className="card-head">
+            <div>
+              <h3>Branch managers</h3>
+              <p>Manage staff members who can operate branch workspaces.</p>
+            </div>
+            <Button onClick={() => openBranchManagerForm()}>Add Branch Manager</Button>
+          </div>
+          <div className="admin-data-table admin-data-table-branch-managers">
+            <div className="admin-table-head admin-table-row-branch-manager">
+              <span>Name</span>
+              <span>Contact</span>
+              <span>Branch</span>
+              <span>Status</span>
+              <span>Actions</span>
+            </div>
+            {branchManagers.length === 0 ? <EmptyState title="No branch managers yet" detail="Promoted branch managers will appear here." /> : null}
+            {branchManagers.map((manager) => (
+              <article key={manager.id} className="admin-table-row admin-table-row-branch-manager">
+                <div><strong>{personName(manager)}</strong><span>{manager.profile_complete_percent ?? 0}% complete</span></div>
+                <div><strong>{manager.email ?? "No email"}</strong><span>{manager.phone ?? "No phone"}</span></div>
+                <div><strong>{manager.cities?.name ?? "No branch city"}</strong><span>{manager.organisation ?? manager.campus ?? "No organisation"}</span></div>
+                <StatusBadge status="branch" />
+                <div className="admin-actions">
+                  <Button variant="secondary" onClick={() => openBranchManagerForm(manager)}>Edit</Button>
+                  <Button variant="ghost" onClick={() => updateProfileRole(manager.id, "customer")}>Remove</Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {!loading && !error && activeTab === "Trips" ? (
         <section className="card">
           <div className="card-head">
@@ -1003,12 +1251,12 @@ export function AdminScreen() {
           <div className="admin-data-table admin-data-table-bookings">
             <div className="admin-table-head admin-table-row-booking">
               <span>Booking</span>
-              <span>Customer</span>
+              <span>User</span>
               <span>Payment</span>
               <span>Status</span>
               <span>Actions</span>
             </div>
-            {bookings.length === 0 ? <EmptyState title="No bookings yet" detail="Customer bookings will appear here as soon as they are created." /> : null}
+            {bookings.length === 0 ? <EmptyState title="No bookings yet" detail="User bookings will appear here as soon as they are created." /> : null}
             {bookings.map((booking) => (
               editingKey === `booking-${booking.id}` ? (
                 <article key={booking.id} className="admin-table-row admin-table-row-booking">
@@ -1047,56 +1295,29 @@ export function AdminScreen() {
         </section>
       ) : null}
 
-      {!loading && !error && activeTab === "Customers" ? (
+      {!loading && !error && activeTab === "Users" ? (
         <section className="card">
-          <div className="card-head"><h3>Customers and staff</h3><Users size={20} /></div>
+          <div className="card-head"><h3>Users and staff</h3><Users size={20} /></div>
           <div className="admin-data-table admin-data-table-customers">
             <div className="admin-table-head admin-table-row-customer">
               <span>Name</span>
               <span>Contact</span>
-              <span>Campus</span>
+              <span>University</span>
               <span>Role</span>
               <span>Actions</span>
             </div>
             {profiles.length === 0 ? <EmptyState title="No users yet" detail="Signed-up users will appear here." /> : null}
             {profiles.map((profile) => (
-              editingKey === `profile-${profile.id}` ? (
-                <article key={profile.id} className="admin-table-row admin-table-row-customer">
-                  <div className="admin-edit-stack">
-                    <input value={String(editingValues.first_name ?? "")} onChange={(event) => setEditingValue("first_name", event.target.value)} placeholder="First name" />
-                    <input value={String(editingValues.last_name ?? "")} onChange={(event) => setEditingValue("last_name", event.target.value)} placeholder="Last name" />
-                  </div>
-                  <div className="admin-edit-stack">
-                    <span>{profile.email ?? "No email"}</span>
-                    <input value={String(editingValues.phone ?? "")} onChange={(event) => setEditingValue("phone", event.target.value)} placeholder="Phone" />
-                  </div>
-                  <div className="admin-edit-stack">
-                    <input value={String(editingValues.campus ?? "")} onChange={(event) => setEditingValue("campus", event.target.value)} placeholder="Campus" />
-                    <input value={String(editingValues.organisation ?? "")} onChange={(event) => setEditingValue("organisation", event.target.value)} placeholder="Organisation" />
-                  </div>
-                  <select value={String(editingValues.role ?? profile.role)} onChange={(event) => setEditingValue("role", event.target.value)}>
-                    <option value="customer">customer</option>
-                    <option value="branch">branch</option>
-                    <option value="admin">admin</option>
-                  </select>
-                  <div className="admin-actions">
-                    <Button variant="secondary" onClick={() => saveProfile(profile.id)}>Save</Button>
-                    <Button variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                    {profile.id !== currentProfile?.id ? <Button variant="ghost" onClick={() => deleteRecord("profiles", profile.id, personName(profile))}>Delete</Button> : null}
-                  </div>
-                </article>
-              ) : (
-                <article key={profile.id} className="admin-table-row admin-table-row-customer">
-                  <div><strong>{personName(profile)}</strong><span>{profile.profile_complete_percent ?? 0}% complete</span></div>
-                  <div><strong>{profile.email ?? "No email"}</strong><span>{profile.phone ?? "No phone"}</span></div>
-                  <div><strong>{profile.campus ?? "No campus"}</strong><span>{profile.organisation ?? "No organisation"}</span></div>
-                  <StatusBadge status={profile.role} />
-                  <div className="admin-actions">
-                    <Button variant="secondary" onClick={() => startEdit(`profile-${profile.id}`, { first_name: profile.first_name ?? "", last_name: profile.last_name ?? "", phone: profile.phone ?? "", campus: profile.campus ?? "", organisation: profile.organisation ?? "", role: profile.role })}>Edit</Button>
-                    {profile.id !== currentProfile?.id ? <Button variant="ghost" onClick={() => deleteRecord("profiles", profile.id, personName(profile))}>Delete</Button> : null}
-                  </div>
-                </article>
-              )
+              <article key={profile.id} className="admin-table-row admin-table-row-customer">
+                <div><strong>{personName(profile)}</strong><span>{profile.profile_complete_percent ?? 0}% complete</span></div>
+                <div><strong>{profile.email ?? "No email"}</strong><span>{profile.phone ?? "No phone"}</span></div>
+                <div><strong>{profile.campus ?? "No university"}</strong><span>{profile.organisation ?? "No organisation"}</span></div>
+                <StatusBadge status={profile.role} />
+                <div className="admin-actions">
+                  <Button variant="secondary" onClick={() => openProfileForm(profile)}>Edit</Button>
+                  {profile.id !== currentProfile?.id ? <Button variant="ghost" onClick={() => deleteRecord("profiles", profile.id, personName(profile))}>Delete</Button> : null}
+                </div>
+              </article>
             ))}
           </div>
         </section>
@@ -1146,7 +1367,7 @@ export function AdminScreen() {
               <FileCheck2 size={20} />
             </div>
             <div className="admin-proof-list">
-              {proofs.length === 0 ? <EmptyState title="No proofs uploaded" detail="Customer EFT or manual payment proofs will appear here." /> : null}
+              {proofs.length === 0 ? <EmptyState title="No proofs uploaded" detail="User EFT or manual payment proofs will appear here." /> : null}
               {proofs.map((proof) => (
                 <article key={proof.id} className="admin-proof-row">
                   <div className="admin-proof-head">
@@ -1174,36 +1395,20 @@ export function AdminScreen() {
       ) : null}
 
       {!loading && !error && activeTab === "Inquiries" ? (
-        <div className="ops-grid">
-          <section className="card">
-            <div className="card-head"><h3>Partner inquiries</h3><Building2 size={20} /></div>
-            <div className="admin-table">
-              {partnerInquiries.length === 0 ? <EmptyState title="No partner inquiries" detail="Campus, society, and partner messages will appear here." /> : null}
-              {partnerInquiries.map((inquiry) => (
-                <article key={inquiry.id} className="admin-row compact">
-                  <div><strong>{inquiry.name}</strong><span>{inquiry.inquiry_type} - {inquiry.organisation ?? inquiry.campus ?? "No organisation"}</span></div>
-                  <div><span>{inquiry.preferred_city ?? "Any city"}</span><span>{formatDate(inquiry.created_at)}</span></div>
-                  <a href={`mailto:${inquiry.email}`}>Email</a>
-                  {inquiry.phone ? <a href={`https://wa.me/${inquiry.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">WhatsApp</a> : <span>No phone</span>}
-                </article>
-              ))}
-            </div>
-          </section>
-          <section className="card">
-            <div className="card-head"><h3>Contact messages</h3><MessageSquare size={20} /></div>
-            <div className="admin-table">
-              {contactInquiries.length === 0 ? <EmptyState title="No contact messages" detail="Support messages will appear here." /> : null}
-              {contactInquiries.map((inquiry) => (
-                <article key={inquiry.id} className="admin-row compact">
-                  <div><strong>{inquiry.name ?? inquiry.email}</strong><span>{inquiry.subject ?? inquiry.message}</span></div>
-                  <div><span>{inquiry.phone ?? "No phone"}</span><span>{formatDate(inquiry.created_at)}</span></div>
-                  <a href={`mailto:${inquiry.email}`}>Email</a>
-                  {inquiry.phone ? <a href={`https://wa.me/${inquiry.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">WhatsApp</a> : <span>No phone</span>}
-                </article>
-              ))}
-            </div>
-          </section>
-        </div>
+        <section className="card">
+          <div className="card-head"><h3>Partner inquiries</h3><Building2 size={20} /></div>
+          <div className="admin-table">
+            {partnerInquiries.length === 0 ? <EmptyState title="No partner inquiries" detail="University, society, and partner messages will appear here." /> : null}
+            {partnerInquiries.map((inquiry) => (
+              <article key={inquiry.id} className="admin-row compact">
+                <div><strong>{inquiry.name}</strong><span>{inquiry.inquiry_type} - {inquiry.organisation ?? inquiry.campus ?? "No organisation"}</span></div>
+                <div><span>{inquiry.preferred_city ?? "Any city"}</span><span>{formatDate(inquiry.created_at)}</span></div>
+                <a href={`mailto:${inquiry.email}`}>Email</a>
+                {inquiry.phone ? <a href={`https://wa.me/${inquiry.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">WhatsApp</a> : <span>No phone</span>}
+              </article>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       {!loading && !error && activeTab === "Cities" ? (
@@ -1257,6 +1462,53 @@ export function AdminScreen() {
         </section>
       ) : null}
 
+      {showBranchManagerModal ? (
+        <div className="admin-modal-backdrop" role="presentation">
+          <section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="add-branch-manager-title">
+            <div className="card-head">
+              <div>
+                <h3 id="add-branch-manager-title">{editingBranchManagerId ? "Edit Branch Manager" : "Add Branch Manager"}</h3>
+              </div>
+            </div>
+
+            <div className="admin-modal-grid">
+              <label className="admin-modal-full">
+                Account email
+                <input value={branchManagerForm.email} onChange={(event) => setBranchManagerFormValue("email", event.target.value)} placeholder="manager@studenttrips.co.za" readOnly={Boolean(editingBranchManagerId)} />
+              </label>
+              <label className="admin-modal-full">
+                Branch city
+                <select value={branchManagerForm.branch_city_id} onChange={(event) => setBranchManagerFormValue("branch_city_id", event.target.value)}>
+                  <option value="">Choose branch city</option>
+                  {cities.map((city) => (
+                    <option key={city.id} value={city.id}>{city.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                First name
+                <input value={branchManagerForm.first_name} onChange={(event) => setBranchManagerFormValue("first_name", event.target.value)} placeholder="Anele" />
+              </label>
+              <label>
+                Last name
+                <input value={branchManagerForm.last_name} onChange={(event) => setBranchManagerFormValue("last_name", event.target.value)} placeholder="Mokoena" />
+              </label>
+              <label>
+                Phone
+                <input value={branchManagerForm.phone} onChange={(event) => setBranchManagerFormValue("phone", event.target.value)} placeholder="+27 79 707 5710" />
+              </label>
+            </div>
+
+            <div className="admin-modal-actions">
+              <Button variant="secondary" onClick={() => { setShowBranchManagerModal(false); resetBranchManagerForm(); }}>Cancel</Button>
+              <Button onClick={createBranchManager} disabled={saving === "branch-manager-create" || saving === `branch-manager-${editingBranchManagerId}`}>
+                {saving === "branch-manager-create" || saving === `branch-manager-${editingBranchManagerId}` ? "Saving..." : editingBranchManagerId ? "Save Branch Manager" : "Add Branch Manager"}
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {showCityModal ? (
         <div className="admin-modal-backdrop" role="presentation">
           <section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="add-city-title">
@@ -1305,6 +1557,56 @@ export function AdminScreen() {
               <Button variant="secondary" onClick={() => { setShowCityModal(false); resetCityForm(); }}>Cancel</Button>
               <Button onClick={createCity} disabled={saving === "cities-create" || saving === `cities-${editingCityId}`}>
                 {saving === "cities-create" || saving === `cities-${editingCityId}` ? "Saving..." : editingCityId ? "Save City" : "Add City"}
+              </Button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {showProfileModal ? (
+        <div className="admin-modal-backdrop" role="presentation">
+          <section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
+            <div className="card-head">
+              <div>
+                <h3 id="edit-profile-title">Edit User</h3>
+              </div>
+            </div>
+
+            <div className="admin-modal-grid">
+              <label>
+                First name
+                <input value={profileForm.first_name} onChange={(event) => setProfileFormValue("first_name", event.target.value)} placeholder="First name" />
+              </label>
+              <label>
+                Last name
+                <input value={profileForm.last_name} onChange={(event) => setProfileFormValue("last_name", event.target.value)} placeholder="Last name" />
+              </label>
+              <label>
+                Phone
+                <input value={profileForm.phone} onChange={(event) => setProfileFormValue("phone", event.target.value)} placeholder="+27 79 707 5710" />
+              </label>
+              <label>
+                Role
+                <select value={profileForm.role} onChange={(event) => setProfileFormValue("role", event.target.value)}>
+                  <option value="customer">customer</option>
+                  <option value="branch">branch</option>
+                  <option value="admin">admin</option>
+                </select>
+              </label>
+              <label>
+                University
+                <input value={profileForm.campus} onChange={(event) => setProfileFormValue("campus", event.target.value)} placeholder="University" />
+              </label>
+              <label>
+                Organisation
+                <input value={profileForm.organisation} onChange={(event) => setProfileFormValue("organisation", event.target.value)} placeholder="Organisation" />
+              </label>
+            </div>
+
+            <div className="admin-modal-actions">
+              <Button variant="secondary" onClick={() => { setShowProfileModal(false); resetProfileForm(); }}>Cancel</Button>
+              <Button onClick={saveProfileForm} disabled={saving === `profiles-${editingProfileId}`}>
+                {saving === `profiles-${editingProfileId}` ? "Saving..." : "Save User"}
               </Button>
             </div>
           </section>
@@ -1387,7 +1689,7 @@ export function AdminScreen() {
                   <label key={index}>
                     Pickup point {index + 1}
                     <span className="admin-pickup-point-row">
-                      <input value={point} onChange={(event) => setTripPickupPoint(index, event.target.value)} placeholder={index === 0 ? "Cape Town Station" : "UCT upper campus"} />
+                      <input value={point} onChange={(event) => setTripPickupPoint(index, event.target.value)} placeholder={index === 0 ? "Cape Town Station" : "UCT upper university pickup"} />
                       <button type="button" onClick={() => removeTripPickupPoint(index)}>Remove</button>
                     </span>
                   </label>
@@ -1407,7 +1709,10 @@ export function AdminScreen() {
 
       {!loading && !error && activeTab === "Updates" ? (
         <section className="card">
-          <div className="card-head"><h3>Updates</h3><Newspaper size={20} /></div>
+          <div className="card-head">
+            <h3>Updates</h3>
+            <Button onClick={() => openUpdateForm()}>Add Update</Button>
+          </div>
           <div className="admin-data-table admin-data-table-updates">
             <div className="admin-table-head admin-table-row-update">
               <span>Update</span>
@@ -1417,31 +1722,15 @@ export function AdminScreen() {
             </div>
             {updates.length === 0 ? <EmptyState title="No updates yet" detail="Published news and operational updates will appear here." /> : null}
             {updates.map((update) => (
-              editingKey === `update-${update.id}` ? (
-                <article key={update.id} className="admin-table-row admin-table-row-update">
-                  <div className="admin-edit-stack">
-                    <input value={String(editingValues.title ?? "")} onChange={(event) => setEditingValue("title", event.target.value)} />
-                    <textarea value={String(editingValues.body ?? "")} onChange={(event) => setEditingValue("body", event.target.value)} rows={3} />
-                  </div>
-                  <input type="date" value={String(editingValues.published_on ?? "")} onChange={(event) => setEditingValue("published_on", event.target.value)} />
-                  <label className="admin-check"><input type="checkbox" checked={Boolean(editingValues.published)} onChange={(event) => setEditingValue("published", event.target.checked)} /> Published</label>
-                  <div className="admin-actions">
-                    <Button variant="secondary" onClick={() => saveUpdate(update.id)}>Save</Button>
-                    <Button variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                    <Button variant="ghost" onClick={() => deleteRecord("updates", update.id, update.title)}>Delete</Button>
-                  </div>
-                </article>
-              ) : (
-                <article key={update.id} className="admin-table-row admin-table-row-update">
-                  <div><strong>{update.title}</strong><span>{update.body}</span></div>
-                  <div><strong>{formatDate(update.published_on)}</strong><span>{formatDate(update.created_at)}</span></div>
-                  <StatusBadge status={update.published ? "Published" : "Draft"} />
-                  <div className="admin-actions">
-                    <Button variant="secondary" onClick={() => startEdit(`update-${update.id}`, { title: update.title, body: update.body, published_on: update.published_on, published: update.published })}>Edit</Button>
-                    <Button variant="ghost" onClick={() => deleteRecord("updates", update.id, update.title)}>Delete</Button>
-                  </div>
-                </article>
-              )
+              <article key={update.id} className="admin-table-row admin-table-row-update">
+                <div><strong>{update.title}</strong><span>{update.body}</span></div>
+                <div><strong>{formatDate(update.published_on)}</strong><span>{formatDate(update.created_at)}</span></div>
+                <StatusBadge status={update.published ? "Published" : "Draft"} />
+                <div className="admin-actions">
+                  <Button variant="secondary" onClick={() => openUpdateForm(update)}>Edit</Button>
+                  <Button variant="ghost" onClick={() => deleteRecord("updates", update.id, update.title)}>Delete</Button>
+                </div>
+              </article>
             ))}
           </div>
         </section>
@@ -1461,7 +1750,7 @@ export function AdminScreen() {
               <span>State</span>
               <span>Actions</span>
             </div>
-            {reviews.length === 0 ? <EmptyState title="No reviews yet" detail="Customer review submissions will appear here." /> : null}
+            {reviews.length === 0 ? <EmptyState title="No reviews yet" detail="User review submissions will appear here." /> : null}
             {reviews.map((review) => (
               editingKey === `review-${review.id}` ? (
                 <article key={review.id} className="admin-table-row admin-table-row-review">
@@ -1504,6 +1793,40 @@ export function AdminScreen() {
             ))}
           </div>
         </section>
+      ) : null}
+
+      {showUpdateModal ? (
+        <div className="admin-modal-backdrop" role="presentation">
+          <section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="add-update-title">
+            <div className="card-head">
+              <div>
+                <h3 id="add-update-title">{editingUpdateId ? "Edit Update" : "Add Update"}</h3>
+              </div>
+            </div>
+
+            <div className="admin-modal-grid">
+              <label className="admin-modal-full">
+                Title
+                <input value={updateForm.title} onChange={(event) => setUpdateFormValue("title", event.target.value)} placeholder="New route added" />
+              </label>
+              <label>
+                Published on
+                <input type="date" value={updateForm.published_on} onChange={(event) => setUpdateFormValue("published_on", event.target.value)} />
+              </label>
+              <label className="admin-modal-full">
+                Body
+                <textarea value={updateForm.body} onChange={(event) => setUpdateFormValue("body", event.target.value)} rows={4} placeholder="Share the update customers should see." />
+              </label>
+            </div>
+
+            <div className="admin-modal-actions">
+              <Button variant="secondary" onClick={() => { setShowUpdateModal(false); resetUpdateForm(); }}>Cancel</Button>
+              <Button onClick={createUpdate} disabled={saving === "updates-create" || saving === `updates-${editingUpdateId}`}>
+                {saving === "updates-create" || saving === `updates-${editingUpdateId}` ? "Saving..." : editingUpdateId ? "Save Update" : "Add Update"}
+              </Button>
+            </div>
+          </section>
+        </div>
       ) : null}
 
       {showReviewModal ? (

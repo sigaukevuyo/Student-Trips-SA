@@ -17,6 +17,7 @@ import { PolicyScreen } from "./screens/Policy/PolicyScreen";
 import { TripDetailScreen } from "./screens/Trips/TripDetailScreen";
 import { TripsScreen } from "./screens/Trips/TripsScreen";
 import { UpdatesScreen } from "./screens/Updates/UpdatesScreen";
+import { CurrencyProvider } from "./lib/currency";
 import { supabase } from "./lib/supabase";
 import type { Trip } from "./lib/types";
 import { FloatingChatButton } from "./shared/components/FloatingChatButton";
@@ -31,17 +32,33 @@ type UserProfileStatus = {
   profileCompletePercent: number;
 };
 
+export type TripFilters = {
+  query?: string;
+  city?: string;
+  category?: string;
+};
+
 const savedViewKey = "student-trips:last-view";
+const savedTripKey = "student-trips:selected-trip";
+const savedCityKey = "student-trips:selected-city";
 const protectedViews = new Set<View>(["customer", "admin", "branch", "onboarding"]);
+const authRequiredViews = new Set<View>(["customer", "admin", "branch", "onboarding", "booking"]);
 const persistentViews = new Set<View>([
   "home",
   "trips",
+  "tripDetail",
+  "booking",
   "cities",
+  "cityDetail",
   "faq",
   "updates",
   "partner",
   "contact",
+  "login",
+  "register",
   "onboarding",
+  "resetPassword",
+  "updatePassword",
   "terms",
   "privacy",
   "refund",
@@ -61,10 +78,33 @@ function getSavedView(): View {
   }
 }
 
+function getSavedJson<T>(key: string): T | null {
+  try {
+    const savedValue = window.localStorage.getItem(key);
+    return savedValue ? (JSON.parse(savedValue) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveJson<T>(key: string, value: T | null) {
+  try {
+    if (value) {
+      window.localStorage.setItem(key, JSON.stringify(value));
+      return;
+    }
+
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures and keep the in-memory navigation working.
+  }
+}
+
 export function App() {
   const [view, setViewState] = useState<View>(getSavedView);
-  const [selectedCity, setSelectedCity] = useState<CityDestination | null>(null);
-  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  const [selectedCity, setSelectedCityState] = useState<CityDestination | null>(() => getSavedJson<CityDestination>(savedCityKey));
+  const [selectedTrip, setSelectedTripState] = useState<Trip | null>(() => getSavedJson<Trip>(savedTripKey));
+  const [tripFilters, setTripFilters] = useState<TripFilters>({});
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>("customer");
 
@@ -77,6 +117,16 @@ export function App() {
     } catch {
       // Ignore storage failures and keep the in-memory navigation working.
     }
+  };
+
+  const setSelectedCity = (city: CityDestination | null) => {
+    setSelectedCityState(city);
+    saveJson(savedCityKey, city);
+  };
+
+  const setSelectedTrip = (trip: Trip | null) => {
+    setSelectedTripState(trip);
+    saveJson(savedTripKey, trip);
   };
 
   const getDashboardView = (role: UserRole = userRole): View => {
@@ -139,6 +189,22 @@ export function App() {
   }, [view]);
 
   useEffect(() => {
+    if ((view === "tripDetail" || view === "booking") && !selectedTrip) {
+      setView("trips");
+    }
+
+    if (view === "cityDetail" && !selectedCity) {
+      setView("cities");
+    }
+  }, [selectedCity, selectedTrip, view]);
+
+  useEffect(() => {
+    if (!isLoggedIn && authRequiredViews.has(view)) {
+      setView("home");
+    }
+  }, [isLoggedIn, view]);
+
+  useEffect(() => {
     if (!supabase) {
       setIsLoggedIn(false);
       return;
@@ -170,6 +236,9 @@ export function App() {
         loadUserRole();
       } else {
         setUserRole("customer");
+        if (event === "SIGNED_OUT" || authRequiredViews.has(view)) {
+          setView("home");
+        }
       }
     });
 
@@ -199,11 +268,63 @@ export function App() {
     return getPostLoginView();
   };
 
+  const handleViewCityTrips = async (trip: Trip) => {
+    if (!supabase) {
+      setView("cities");
+      return;
+    }
+
+    const { data } = await supabase
+      .from("cities")
+      .select("id,slug,name,province,image_url,tagline,support_email,support_phone,trips(count)")
+      .eq("active", true)
+      .eq("name", trip.city)
+      .maybeSingle();
+
+    if (data) {
+      const city = data as unknown as CityDestination;
+      setSelectedCity({
+        ...city,
+        tripCount: city.trips?.[0]?.count ?? 0,
+      });
+      setView("cityDetail");
+      return;
+    }
+
+    setView("cities");
+  };
+
+  const handleOpenCityByName = async (cityName: string) => {
+    if (!supabase) {
+      setView("cities");
+      return;
+    }
+
+    const { data } = await supabase
+      .from("cities")
+      .select("id,slug,name,province,image_url,tagline,support_email,support_phone,trips(count)")
+      .eq("active", true)
+      .eq("name", cityName)
+      .maybeSingle();
+
+    if (data) {
+      const city = data as unknown as CityDestination;
+      setSelectedCity({
+        ...city,
+        tripCount: city.trips?.[0]?.count ?? 0,
+      });
+      setView("cityDetail");
+      return;
+    }
+
+    setView("cities");
+  };
+
   return (
-    <>
+    <CurrencyProvider>
       <AppHeader activeView={view} isLoggedIn={isLoggedIn} onDashboardClick={handleDashboardClick} onSignOut={handleSignOut} setView={setView} />
-      {view === "home" ? <HomeScreen setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
-      {view === "trips" ? <TripsScreen setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
+      {view === "home" ? <HomeScreen onTripSearch={setTripFilters} onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
+      {view === "trips" ? <TripsScreen initialFilters={tripFilters} onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
       {view === "tripDetail" ? <TripDetailScreen trip={selectedTrip} setView={setView} /> : null}
       {view === "booking" ? <BookingScreen trip={selectedTrip} setView={setView} /> : null}
       {view === "cities" ? <CitiesScreen setView={setView} setSelectedCity={setSelectedCity} /> : null}
@@ -222,11 +343,11 @@ export function App() {
       {view === "refund" ? <PolicyScreen policy="refund" /> : null}
       {view === "accessibility" ? <PolicyScreen policy="accessibility" /> : null}
       {view === "waiver" ? <PolicyScreen policy="waiver" /> : null}
-      {view === "customer" ? <CustomerScreen setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
+      {view === "customer" ? <CustomerScreen onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
       {view === "admin" ? <AdminScreen /> : null}
       {view === "branch" ? <BranchScreen /> : null}
-      <SiteFooter activeView={view} setView={setView} />
+      <SiteFooter activeView={view} onCityClick={handleOpenCityByName} setView={setView} />
       <FloatingChatButton />
-    </>
+    </CurrencyProvider>
   );
 }

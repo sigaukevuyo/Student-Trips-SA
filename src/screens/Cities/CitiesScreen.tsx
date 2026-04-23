@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { DbCity } from "../../lib/db";
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import { ThemeLoader } from "../../shared/components/ThemeLoader";
 import type { View } from "../../shared/navigation";
@@ -40,7 +41,7 @@ export function CitiesScreen({
       if (!mounted) return;
 
       if (loadError) {
-        setError(loadError.message);
+        setError(friendlyError(loadError, "We could not load destinations right now. Please try again."));
       }
 
       setCities(

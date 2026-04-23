@@ -22,7 +22,7 @@ export function RoleShell({
   children: React.ReactNode;
 }) {
   const items = tabs ?? (scope === "admin"
-      ? ["Overview", "Bookings", "Customers", "Cities", "Trips", "Payments", "Inquiries", "Updates", "Reviews"]
+      ? ["Overview", "Bookings", "Users", "Cities", "Trips", "Payments", "Inquiries", "Updates", "Reviews"]
       : ["Overview", "Trips", "Bookings", "Customers", "Payments", "Media", "Messages", "Reports"]);
 
   return (
@@ -56,7 +56,7 @@ export function RoleShell({
         {title || subtitle ? (
           <div className="ops-top">
             <div>
-              <span className="eyebrow dark">{scope === "admin" ? "HQ operations" : "Branch workspace"}</span>
+              {scope === "admin" ? <span className="eyebrow dark">HQ operations</span> : null}
               {title ? <h2 className="font-display">{title}</h2> : null}
               {subtitle ? <p>{subtitle}</p> : null}
             </div>

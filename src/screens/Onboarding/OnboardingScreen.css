@@ -5,12 +5,20 @@
 
 .onboarding-form {
   width: min(100% - 32px, 980px);
+  max-height: calc(100vh - 84px);
+  overflow: auto;
   margin-inline: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.98);
   box-shadow: var(--shadow);
   padding: 24px;
+  scrollbar-width: none;
+}
+
+.onboarding-form::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .onboarding-head {
@@ -56,6 +64,12 @@
 .onboarding-form select,
 .onboarding-form textarea {
   border-radius: 8px;
+}
+
+.onboarding-form small {
+  color: var(--muted-ink);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .onboarding-form textarea {

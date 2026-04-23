@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import { ThemeLoader } from "../../shared/components/ThemeLoader";
 import "./UpdatesScreen.css";
@@ -31,7 +32,7 @@ export function UpdatesScreen() {
       if (!mounted) return;
 
       if (loadError) {
-        setError(loadError.message);
+        setError(friendlyError(loadError, "We could not load updates right now. Please try again."));
       }
 
       setUpdates((data as Update[] | null) ?? []);

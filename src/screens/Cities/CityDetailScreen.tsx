@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { dbTripToTrip, tripSelect, type DbTrip } from "../../lib/db";
+import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
 import { ThemeLoader } from "../../shared/components/ThemeLoader";
@@ -47,7 +48,7 @@ export function CityDetailScreen({
       if (!mounted) return;
 
       if (loadError) {
-        setError(loadError.message);
+        setError(friendlyError(loadError, "We could not load trips for this city right now. Please try again."));
       }
 
       setCityTrips(((data as unknown as DbTrip[] | null) ?? []).map(dbTripToTrip));
@@ -95,7 +96,7 @@ export function CityDetailScreen({
 
         <article className="city-detail-info-card city-detail-partnership-card">
           <h2>Need a private group trip?</h2>
-          <p>We support campus societies, student councils, and private departures.</p>
+          <p>We support university societies, student councils, and private departures.</p>
           <button type="button">Contact partnerships</button>
         </article>
       </section>
