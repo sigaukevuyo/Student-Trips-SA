@@ -1,0 +1,157 @@
+.partner-page {
+  min-height: 690px;
+  padding-block: 76px 58px;
+}
+
+.partner-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+  gap: 34px;
+  align-items: start;
+}
+
+.partner-copy > span {
+  display: inline-flex;
+  border: 1px solid #adbecf;
+  border-radius: 999px;
+  background: white;
+  color: var(--primary-soft);
+  padding: 7px 11px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.partner-copy h1 {
+  max-width: 610px;
+  margin: 18px 0 0;
+  color: var(--primary);
+  font-size: 38px;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.partner-copy p {
+  max-width: 620px;
+  margin: 15px 0 0;
+  color: #495d72;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.partner-support {
+  margin-top: 34px;
+}
+
+.partner-support h2 {
+  margin: 0 0 16px;
+  color: var(--primary);
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.partner-support ul {
+  display: grid;
+  gap: 13px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.partner-support li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--primary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.partner-support svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+  margin-top: 1px;
+}
+
+.partner-form {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #d9e1e8;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 15px 42px rgba(17, 49, 94, 0.1);
+  padding: 24px;
+}
+
+.partner-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.partner-form label {
+  color: #4a5d71;
+  font-size: 13px;
+}
+
+.partner-form input,
+.partner-form select,
+.partner-form textarea {
+  width: 100%;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  padding: 0 12px;
+}
+
+.partner-form input,
+.partner-form select {
+  min-height: 42px;
+}
+
+.partner-form textarea {
+  min-height: 142px;
+  padding-block: 11px;
+  resize: vertical;
+}
+
+.partner-form button {
+  justify-self: start;
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--primary);
+  padding: 0 22px;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+@media (max-width: 980px) {
+  .partner-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .partner-page {
+    min-height: auto;
+    padding-block: 46px 34px;
+  }
+
+  .partner-copy h1 {
+    font-size: 31px;
+  }
+
+  .partner-form,
+  .partner-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .partner-form {
+    border-radius: 12px;
+    padding: 20px;
+  }
+}

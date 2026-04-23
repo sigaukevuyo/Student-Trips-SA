@@ -1,0 +1,13 @@
+.branch-message-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  justify-content: start;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fbfcfd;
+  color: var(--primary);
+  font-weight: 800;
+  padding: 13px;
+}

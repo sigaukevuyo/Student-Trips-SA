@@ -1,0 +1,51 @@
+.trips-title {
+  padding-top: 24px;
+}
+
+.trips-title h1 {
+  max-width: 760px;
+  margin: 18px 0 0;
+  font-size: clamp(42px, 7vw, 76px);
+  line-height: 1.02;
+  letter-spacing: 0;
+}
+
+.trips-title p {
+  max-width: 640px;
+  color: var(--muted-ink);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.trips-filter-card {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+  align-items: end;
+  gap: 12px;
+  margin: 24px 0 28px;
+}
+
+.trips-result-count {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--primary);
+  color: white;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+@media (max-width: 980px) {
+  .trips-filter-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .trips-title h1 {
+    font-size: 42px;
+  }
+}

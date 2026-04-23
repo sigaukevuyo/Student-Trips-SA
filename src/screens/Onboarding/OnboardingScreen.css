@@ -1,0 +1,132 @@
+.onboarding-page {
+  background: var(--muted);
+  padding-block: 42px 64px;
+}
+
+.onboarding-form {
+  width: min(100% - 32px, 980px);
+  margin-inline: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.onboarding-head {
+  margin-bottom: 22px;
+}
+
+.onboarding-head h1 {
+  margin: 12px 0 8px;
+  color: var(--primary);
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.onboarding-head p,
+.onboarding-loading p {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.onboarding-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.onboarding-section h2 {
+  margin: 0;
+  color: var(--primary);
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.onboarding-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.onboarding-form input,
+.onboarding-form select,
+.onboarding-form textarea {
+  border-radius: 8px;
+}
+
+.onboarding-form textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: 1px solid #d8e0e8;
+  background: white;
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.onboarding-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.onboarding-actions.split {
+  grid-template-columns: minmax(150px, 0.32fr) 1fr;
+  align-items: center;
+}
+
+.onboarding-actions.split .auth-message {
+  grid-column: 1 / -1;
+}
+
+.onboarding-cancel {
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: white;
+  color: var(--primary);
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.onboarding-cancel:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.onboarding-loading {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  border: 1px dashed #cbd6e2;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 24px;
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .onboarding-page {
+    padding-block: 30px 42px;
+  }
+
+  .onboarding-form {
+    width: min(100% - 24px, 980px);
+    padding: 18px;
+  }
+
+  .onboarding-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .onboarding-actions.split {
+    grid-template-columns: 1fr;
+  }
+}
