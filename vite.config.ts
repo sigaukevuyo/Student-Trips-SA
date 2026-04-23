@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/Student-Trips-SA/",
+  base: process.env.GITHUB_ACTIONS === "true" ? "/Student-Trips-SA/" : "/",
   server: {
     port: 5174
   }
