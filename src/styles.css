@@ -588,12 +588,6 @@ select {
   text-align: right;
 }
 
-.trip-currency-note {
-  margin: 0;
-  color: #748194 !important;
-  font-size: 12px !important;
-}
-
 .trip-quick-view {
   border: 1px solid #d9e1e8;
   border-radius: 10px;

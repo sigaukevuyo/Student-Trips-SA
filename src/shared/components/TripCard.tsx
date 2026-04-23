@@ -25,7 +25,7 @@ export function TripCard({
   onViewCityTrips?: (trip: Trip) => void;
   onViewTrip?: (trip: Trip) => void;
 }) {
-  const { formatTripMoney, priceNotice } = useCurrency();
+  const { formatTripMoney } = useCurrency();
   const nearlyFull = trip.status === "NEARLY_FULL";
   const soldOut = trip.status === "SOLD_OUT";
   const badges = getTripBadges(trip);
@@ -150,7 +150,6 @@ export function TripCard({
           <strong>From {formatTripMoney(trip.price)}</strong>
           <strong>Deposit {formatTripMoney(trip.deposit)}</strong>
         </div>
-        <p className="trip-currency-note">{priceNotice}</p>
         <div className="trip-card-actions">
           <button type="button" onClick={() => onViewTrip?.(trip)}>View Trip</button>
           {!hideCityAction ? <button type="button" onClick={() => onViewCityTrips?.(trip)}>See city trips</button> : null}
