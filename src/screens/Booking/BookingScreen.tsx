@@ -1,12 +1,12 @@
 import { CalendarDays, CheckCircle2, Clock, FileUp, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useCurrency } from "../../lib/currency";
 import { formatDate } from "../../lib/data";
 import { friendlyError } from "../../lib/friendlyError";
 import { usePricing } from "../../lib/pricing";
 import { supabase } from "../../lib/supabase";
-import type { Trip } from "../../lib/types";
+import type { CityPickupPoint, Trip } from "../../lib/types";
 import type { View } from "../../shared/navigation";
 import "./BookingScreen.css";
 
@@ -22,6 +22,25 @@ const bankDetails = [
   { label: "SWIFT code", value: "FIRNZAJJ" },
 ] as const;
 
+const fallbackCityPickupPoints: Record<string, Array<{ area: string; point: string; sortOrder: number }>> = {
+  gqeberha: [
+    { area: "Humewood", point: "MC Donald's", sortOrder: 10 },
+    { area: "Summerstrand", point: "SSV", sortOrder: 20 },
+    { area: "Summerstrand", point: "SPAR", sortOrder: 21 },
+    { area: "Summerstrand", point: "2nd Avenue Campus", sortOrder: 22 },
+    { area: "Summerstrand", point: "Dunes", sortOrder: 23 },
+    { area: "Town", point: "Feathermarket", sortOrder: 30 },
+    { area: "Town", point: "Laboria Accommodation", sortOrder: 31 },
+    { area: "Central", point: "Suites of Cape", sortOrder: 40 },
+    { area: "Central", point: "Donkin Park", sortOrder: 41 },
+    { area: "Walmer", point: "Moffat on Main at KFC", sortOrder: 50 },
+    { area: "Greenacres & Newton Park", point: "Greenacres Checkers Entrance", sortOrder: 60 },
+    { area: "North End", point: "Pier 14 Mall", sortOrder: 70 },
+    { area: "North End", point: "Home Affairs", sortOrder: 71 },
+    { area: "North End", point: "The Law Court", sortOrder: 72 },
+  ],
+};
+
 type PaymentOption = "full" | "deposit";
 type PaymentMethod = "proof";
 
@@ -34,6 +53,8 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("full");
   const [paymentMethod] = useState<PaymentMethod>("proof");
   const [pickupPoint, setPickupPoint] = useState("");
+  const [pickupArea, setPickupArea] = useState("");
+  const [cityPickupPoints, setCityPickupPoints] = useState<CityPickupPoint[]>([]);
   const [referralCode, setReferralCode] = useState("");
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofFileName, setProofFileName] = useState("");
@@ -46,6 +67,98 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
     const points = trip.pickupPoints.length > 0 ? trip.pickupPoints : [trip.meetingPoint].filter(Boolean);
     return points.length > 0 ? points : ["Main university pickup"];
   }, [trip]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadPickupPoints() {
+      if (!supabase || !trip?.cityId) {
+        setCityPickupPoints([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("city_pickup_points")
+        .select("id,city_id,area,point,sort_order")
+        .eq("city_id", trip.cityId)
+        .eq("active", true)
+        .order("sort_order")
+        .order("area")
+        .order("point");
+
+      if (!mounted) return;
+      if (error) {
+        setCityPickupPoints([]);
+        return;
+      }
+
+      const rows = ((data as Array<{ id: string; city_id: string; area: string; point: string; sort_order: number }> | null) ?? []).map((row) => ({
+        id: row.id,
+        cityId: row.city_id,
+        area: row.area,
+        point: row.point,
+        sortOrder: row.sort_order,
+      }));
+
+      if (rows.length > 0) {
+        setCityPickupPoints(rows);
+        return;
+      }
+
+      const fallbackPoints = trip.citySlug ? fallbackCityPickupPoints[trip.citySlug] ?? [] : [];
+      setCityPickupPoints(
+        fallbackPoints.map((item, index) => ({
+          id: `fallback-${trip.citySlug ?? trip.city}-${index}`,
+          cityId: trip.cityId ?? trip.citySlug ?? trip.city,
+          area: item.area,
+          point: item.point,
+          sortOrder: item.sortOrder,
+        })),
+      );
+    }
+
+    loadPickupPoints();
+
+    return () => {
+      mounted = false;
+    };
+  }, [trip?.cityId]);
+
+  const availableCityPickupPoints = useMemo(() => {
+    return cityPickupPoints;
+  }, [cityPickupPoints]);
+
+  const pickupAreas = useMemo(
+    () => Array.from(new Set(availableCityPickupPoints.map((item) => item.area))),
+    [availableCityPickupPoints],
+  );
+
+  useEffect(() => {
+    if (pickupAreas.length === 0) {
+      setPickupArea("");
+      return;
+    }
+
+    if (!pickupArea || !pickupAreas.includes(pickupArea)) {
+      setPickupArea(pickupAreas[0]);
+    }
+  }, [pickupArea, pickupAreas]);
+
+  const areaPickupPoints = useMemo(() => {
+    if (!pickupArea) return [];
+    return availableCityPickupPoints.filter((item) => item.area === pickupArea);
+  }, [availableCityPickupPoints, pickupArea]);
+
+  useEffect(() => {
+    if (areaPickupPoints.length === 0) {
+      setPickupPoint("");
+      return;
+    }
+
+    if (!pickupPoint || !areaPickupPoints.some((item) => item.point === pickupPoint)) {
+      setPickupPoint(areaPickupPoints[0].point);
+    }
+  }, [areaPickupPoints, pickupPoint]);
 
   const selectedPickupPoint = pickupPoint || pickupPoints[0] || "";
   const travelerLimit = Math.max(1, Math.min(trip?.seatsRemaining ?? 1, maxTravelersPerBooking));
@@ -233,14 +346,35 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
                     </select>
                   </label>
                 </div>
-                <label>
-                  Pickup point
-                  <select value={selectedPickupPoint} onChange={(event) => setPickupPoint(event.target.value)}>
-                    {pickupPoints.map((point) => (
-                      <option key={point} value={point}>{point}</option>
-                    ))}
-                  </select>
-                </label>
+                {availableCityPickupPoints.length > 0 ? (
+                  <div className="booking-form-grid">
+                    <label>
+                      Pickup area
+                      <select value={pickupArea} onChange={(event) => setPickupArea(event.target.value)}>
+                        {pickupAreas.map((area) => (
+                          <option key={area} value={area}>{area}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Pickup point
+                      <select value={selectedPickupPoint} onChange={(event) => setPickupPoint(event.target.value)}>
+                        {areaPickupPoints.map((point) => (
+                          <option key={point.id} value={point.point}>{point.point}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : (
+                  <label>
+                    Pickup point
+                    <select value={selectedPickupPoint} onChange={(event) => setPickupPoint(event.target.value)}>
+                      {pickupPoints.map((point) => (
+                        <option key={point} value={point}>{point}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label>
                   Referral code (optional)
                   <input value={referralCode} onChange={(event) => setReferralCode(event.target.value)} placeholder="WELCOMETOO" />

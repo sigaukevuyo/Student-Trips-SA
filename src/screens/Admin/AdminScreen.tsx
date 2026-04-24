@@ -56,6 +56,15 @@ type AdminCity = {
   trips?: { count: number }[] | null;
 };
 
+type AdminPickupPoint = {
+  id: string;
+  city_id: string;
+  area: string;
+  point: string;
+  sort_order: number;
+  active: boolean;
+};
+
 type AdminTrip = {
   id: string;
   slug: string;
@@ -210,11 +219,17 @@ function renderTripPriceSummary(trip: AdminTrip) {
   );
 }
 
+function includesText(value: string | null | undefined, query: string) {
+  if (!query.trim()) return true;
+  return (value ?? "").toLowerCase().includes(query.trim().toLowerCase());
+}
+
 export function AdminScreen() {
   const [activeTab, setActiveTabState] = useState(getSavedAdminTab);
   const [currentProfile, setCurrentProfile] = useState<AdminProfile | null>(null);
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);
   const [cities, setCities] = useState<(AdminCity & { tripCount: number })[]>([]);
+  const [cityPickupPoints, setCityPickupPoints] = useState<AdminPickupPoint[]>([]);
   const [trips, setTrips] = useState<AdminTrip[]>([]);
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [payments, setPayments] = useState<AdminPayment[]>([]);
@@ -299,6 +314,24 @@ export function AdminScreen() {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [tableFilters, setTableFilters] = useState({
+    branchManagersQuery: "",
+    tripsQuery: "",
+    tripsCity: "",
+    bookingsQuery: "",
+    bookingsStatus: "",
+    usersQuery: "",
+    usersRole: "",
+    paymentsQuery: "",
+    paymentsStatus: "",
+    inquiriesQuery: "",
+    inquiriesCity: "",
+    citiesQuery: "",
+    reviewsQuery: "",
+    reviewsState: "",
+    updatesQuery: "",
+    logsQuery: "",
+  });
 
   function setActiveTab(nextTab: string) {
     setActiveTabState(nextTab);
@@ -307,6 +340,10 @@ export function AdminScreen() {
     } catch {
       // Keep tab navigation working when storage is unavailable.
     }
+  }
+
+  function setTableFilter(field: keyof typeof tableFilters, value: string) {
+    setTableFilters((current) => ({ ...current, [field]: value }));
   }
 
   async function loadAdmin() {
@@ -334,6 +371,7 @@ export function AdminScreen() {
       updateResult,
       reviewResult,
       activityLogResult,
+      pickupPointResult,
     ] = await Promise.all([
       userId ? supabase.from("profiles").select("id,role,branch_city_id,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at,cities(name)").eq("id", userId).maybeSingle() : Promise.resolve({ data: null, error: null }),
       supabase.from("profiles").select("id,role,branch_city_id,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at,cities(name)").order("created_at", { ascending: false }).limit(100),
@@ -350,6 +388,7 @@ export function AdminScreen() {
         .select("id,actor_id,actor_role,action,entity_type,entity_id,entity_label,details,created_at,profiles(first_name,last_name,email)")
         .order("created_at", { ascending: false })
         .limit(150),
+      supabase.from("city_pickup_points").select("id,city_id,area,point,sort_order,active").eq("active", true).order("city_id").order("sort_order").order("area").order("point"),
     ]);
 
     const firstError =
@@ -362,7 +401,8 @@ export function AdminScreen() {
       proofResult.error ??
       partnerResult.error ??
       updateResult.error ??
-      reviewResult.error;
+      reviewResult.error ??
+      pickupPointResult.error;
 
     if (firstError) {
       setError(friendlyError(firstError, "We could not load admin data right now. Please try again."));
@@ -371,6 +411,7 @@ export function AdminScreen() {
     setCurrentProfile((currentProfileResult.data as AdminProfile | null) ?? null);
     setProfiles((profilesResult.data as AdminProfile[] | null) ?? []);
     setCities(((cityResult.data as unknown as AdminCity[] | null) ?? []).map((city) => ({ ...city, tripCount: city.trips?.[0]?.count ?? 0 })));
+    setCityPickupPoints((pickupPointResult.data as AdminPickupPoint[] | null) ?? []);
     setTrips((tripResult.data as unknown as AdminTrip[] | null) ?? []);
     setBookings((bookingResult.data as unknown as AdminBooking[] | null) ?? []);
     setPayments((paymentResult.data as unknown as AdminPayment[] | null) ?? []);
@@ -703,6 +744,24 @@ export function AdminScreen() {
       ...current,
       pickup_points: current.pickup_points.length > 1 ? current.pickup_points.filter((_, pointIndex) => pointIndex !== index) : [""],
     }));
+  }
+
+  function toggleTripPickupPoint(point: string) {
+    setTripForm((current) => {
+      const exists = current.pickup_points.includes(point);
+      const nextPickupPoints = exists ? current.pickup_points.filter((item) => item !== point) : [...current.pickup_points.filter(Boolean), point];
+      const sanitizedPickupPoints = nextPickupPoints.length > 0 ? nextPickupPoints : [""];
+      const nextMeetingPoint =
+        current.meeting_point && sanitizedPickupPoints.includes(current.meeting_point)
+          ? current.meeting_point
+          : sanitizedPickupPoints.find(Boolean) ?? "";
+
+      return {
+        ...current,
+        pickup_points: sanitizedPickupPoints,
+        meeting_point: nextMeetingPoint,
+      };
+    });
   }
 
   function openReviewForm(review?: AdminReview) {
@@ -1301,9 +1360,105 @@ export function AdminScreen() {
   const profilesById = useMemo(() => Object.fromEntries(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const branchManagers = useMemo(() => profiles.filter((profile) => profile.role === "branch"), [profiles]);
   const maxCityTripCount = useMemo(() => Math.max(...cities.map((city) => city.tripCount), 1), [cities]);
+  const selectedCityPickupPoints = useMemo(
+    () => cityPickupPoints.filter((item) => item.city_id === tripForm.city_id),
+    [cityPickupPoints, tripForm.city_id],
+  );
+  const groupedSelectedCityPickupPoints = useMemo(
+    () =>
+      selectedCityPickupPoints.reduce<Record<string, AdminPickupPoint[]>>((groups, item) => {
+        groups[item.area] = [...(groups[item.area] ?? []), item];
+        return groups;
+      }, {}),
+    [selectedCityPickupPoints],
+  );
   const activePayments = useMemo(
     () => payments.filter((payment) => !payment.bookings?.status || activeBookingStatuses.has(payment.bookings.status)),
     [payments],
+  );
+  const filteredBranchManagers = useMemo(
+    () =>
+      branchManagers.filter(
+        (manager) =>
+          includesText(`${personName(manager)} ${manager.email ?? ""} ${manager.phone ?? ""} ${manager.cities?.name ?? ""}`, tableFilters.branchManagersQuery),
+      ),
+    [branchManagers, tableFilters.branchManagersQuery],
+  );
+  const filteredTrips = useMemo(
+    () =>
+      trips.filter((trip) => {
+        const matchesQuery = includesText(`${trip.title} ${trip.category} ${trip.slug} ${trip.cities?.name ?? ""}`, tableFilters.tripsQuery);
+        const matchesCity = !tableFilters.tripsCity || (trip.cities?.name ?? "") === tableFilters.tripsCity;
+        return matchesQuery && matchesCity;
+      }),
+    [tableFilters.tripsCity, tableFilters.tripsQuery, trips],
+  );
+  const filteredBookings = useMemo(
+    () =>
+      bookings.filter((booking) => {
+        const matchesQuery = includesText(`${booking.booking_ref} ${booking.trips?.title ?? ""} ${profilesById[booking.user_id]?.email ?? ""} ${personName(profilesById[booking.user_id] ?? null)}`, tableFilters.bookingsQuery);
+        const matchesStatus = !tableFilters.bookingsStatus || booking.status === tableFilters.bookingsStatus;
+        return matchesQuery && matchesStatus;
+      }),
+    [bookings, profilesById, tableFilters.bookingsQuery, tableFilters.bookingsStatus],
+  );
+  const filteredProfiles = useMemo(
+    () =>
+      profiles.filter((profile) => {
+        const matchesQuery = includesText(`${personName(profile)} ${profile.email ?? ""} ${profile.phone ?? ""} ${profile.campus ?? ""} ${profile.organisation ?? ""}`, tableFilters.usersQuery);
+        const matchesRole = !tableFilters.usersRole || profile.role === tableFilters.usersRole;
+        return matchesQuery && matchesRole;
+      }),
+    [profiles, tableFilters.usersQuery, tableFilters.usersRole],
+  );
+  const filteredActivePayments = useMemo(
+    () =>
+      activePayments.filter((payment) => {
+        const matchesQuery = includesText(`${payment.bookings?.booking_ref ?? ""} ${payment.bookings?.trips?.title ?? ""} ${payment.provider_reference ?? ""} ${payment.provider ?? ""} ${payment.method}`, tableFilters.paymentsQuery);
+        const matchesStatus = !tableFilters.paymentsStatus || payment.status === tableFilters.paymentsStatus;
+        return matchesQuery && matchesStatus;
+      }),
+    [activePayments, tableFilters.paymentsQuery, tableFilters.paymentsStatus],
+  );
+  const filteredProofs = useMemo(
+    () =>
+      proofs.filter((proof) =>
+        includesText(`${proof.bookings?.booking_ref ?? ""} ${proof.file_name ?? ""}`, tableFilters.paymentsQuery),
+      ),
+    [proofs, tableFilters.paymentsQuery],
+  );
+  const filteredPartnerInquiries = useMemo(
+    () =>
+      partnerInquiries.filter((inquiry) => {
+        const matchesQuery = includesText(`${inquiry.name} ${inquiry.email} ${inquiry.organisation ?? ""} ${inquiry.campus ?? ""} ${inquiry.details ?? ""}`, tableFilters.inquiriesQuery);
+        const matchesCity = !tableFilters.inquiriesCity || (inquiry.preferred_city ?? "") === tableFilters.inquiriesCity;
+        return matchesQuery && matchesCity;
+      }),
+    [partnerInquiries, tableFilters.inquiriesCity, tableFilters.inquiriesQuery],
+  );
+  const filteredCities = useMemo(
+    () => cities.filter((city) => includesText(`${city.name} ${city.slug} ${city.province ?? ""} ${city.support_email ?? ""}`, tableFilters.citiesQuery)),
+    [cities, tableFilters.citiesQuery],
+  );
+  const filteredReviews = useMemo(
+    () =>
+      reviews.filter((review) => {
+        const matchesQuery = includesText(`${review.author_name} ${review.quote} ${review.trips?.title ?? ""}`, tableFilters.reviewsQuery);
+        const matchesState = !tableFilters.reviewsState || (tableFilters.reviewsState === "Published" ? review.published : !review.published);
+        return matchesQuery && matchesState;
+      }),
+    [reviews, tableFilters.reviewsQuery, tableFilters.reviewsState],
+  );
+  const filteredUpdates = useMemo(
+    () => updates.filter((update) => includesText(`${update.title} ${update.body} ${update.banner_special_collection_slug ?? ""}`, tableFilters.updatesQuery)),
+    [tableFilters.updatesQuery, updates],
+  );
+  const filteredActivityLogs = useMemo(
+    () =>
+      activityLogs.filter((log) =>
+        includesText(`${log.action} ${log.entity_type} ${log.entity_label ?? ""} ${log.profiles?.email ?? ""} ${log.profiles?.first_name ?? ""} ${log.profiles?.last_name ?? ""}`, tableFilters.logsQuery),
+      ),
+    [activityLogs, tableFilters.logsQuery],
   );
 
   return (
@@ -1373,6 +1528,9 @@ export function AdminScreen() {
             </div>
             <Button onClick={() => openBranchManagerForm()}>Add Branch Manager</Button>
           </div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.branchManagersQuery} onChange={(event) => setTableFilter("branchManagersQuery", event.target.value)} placeholder="Search branch managers" />
+          </div>
           <div className="admin-data-table admin-data-table-branch-managers">
             <div className="admin-table-head admin-table-row-branch-manager">
               <span>Name</span>
@@ -1381,8 +1539,8 @@ export function AdminScreen() {
               <span>Status</span>
               <span>Actions</span>
             </div>
-            {branchManagers.length === 0 ? <EmptyState title="No branch managers yet" detail="Promoted branch managers will appear here." /> : null}
-            {branchManagers.map((manager) => (
+            {filteredBranchManagers.length === 0 ? <EmptyState title="No branch managers found" detail="Try another search or add a branch manager." /> : null}
+            {filteredBranchManagers.map((manager) => (
               <article key={manager.id} className="admin-table-row admin-table-row-branch-manager">
                 <div><strong>{personName(manager)}</strong><span>{manager.profile_complete_percent ?? 0}% complete</span></div>
                 <div><strong>{manager.email ?? "No email"}</strong><span>{manager.phone ?? "No phone"}</span></div>
@@ -1404,6 +1562,13 @@ export function AdminScreen() {
             <h3>Trips</h3>
             <Button onClick={() => openTripForm()}>Add Trip</Button>
           </div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.tripsQuery} onChange={(event) => setTableFilter("tripsQuery", event.target.value)} placeholder="Search trips" />
+            <select value={tableFilters.tripsCity} onChange={(event) => setTableFilter("tripsCity", event.target.value)}>
+              <option value="">All cities</option>
+              {cities.map((city) => <option key={city.id} value={city.name}>{city.name}</option>)}
+            </select>
+          </div>
           <div className="admin-data-table admin-data-table-trips">
             <div className="admin-table-head admin-table-row-trip">
               <span>Trip</span>
@@ -1412,8 +1577,8 @@ export function AdminScreen() {
               <span>Status</span>
               <span>Actions</span>
             </div>
-            {trips.length === 0 ? <EmptyState title="No trips yet" detail="Published and draft departures will appear here." /> : null}
-            {trips.map((trip) => (
+            {filteredTrips.length === 0 ? <EmptyState title="No trips found" detail="Try another search or city filter." /> : null}
+            {filteredTrips.map((trip) => (
               editingKey === `trip-${trip.id}` ? (
                 <article key={trip.id} className="admin-table-row admin-table-row-trip">
                   <div className="admin-edit-stack">
@@ -1455,6 +1620,13 @@ export function AdminScreen() {
       {!loading && !error && activeTab === "Bookings" ? (
         <section className="card">
           <div className="card-head"><h3>Bookings</h3><Users size={20} /></div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.bookingsQuery} onChange={(event) => setTableFilter("bookingsQuery", event.target.value)} placeholder="Search bookings" />
+            <select value={tableFilters.bookingsStatus} onChange={(event) => setTableFilter("bookingsStatus", event.target.value)}>
+              <option value="">All statuses</option>
+              {Array.from(new Set(bookings.map((booking) => booking.status))).map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </div>
           <div className="admin-data-table admin-data-table-bookings">
             <div className="admin-table-head admin-table-row-booking">
               <span>Booking</span>
@@ -1463,8 +1635,8 @@ export function AdminScreen() {
               <span>Status</span>
               <span>Actions</span>
             </div>
-            {bookings.length === 0 ? <EmptyState title="No bookings yet" detail="User bookings will appear here as soon as they are created." /> : null}
-            {bookings.map((booking) => (
+            {filteredBookings.length === 0 ? <EmptyState title="No bookings found" detail="Try another search or booking status." /> : null}
+            {filteredBookings.map((booking) => (
               editingKey === `booking-${booking.id}` ? (
                 <article key={booking.id} className="admin-table-row admin-table-row-booking">
                   <div><strong>{booking.booking_ref}</strong><span>{booking.trips?.title ?? "Trip"}</span></div>
@@ -1505,6 +1677,15 @@ export function AdminScreen() {
       {!loading && !error && activeTab === "Users" ? (
         <section className="card">
           <div className="card-head"><h3>Users and staff</h3><Users size={20} /></div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.usersQuery} onChange={(event) => setTableFilter("usersQuery", event.target.value)} placeholder="Search users" />
+            <select value={tableFilters.usersRole} onChange={(event) => setTableFilter("usersRole", event.target.value)}>
+              <option value="">All roles</option>
+              <option value="customer">customer</option>
+              <option value="branch">branch</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
           <div className="admin-data-table admin-data-table-customers">
             <div className="admin-table-head admin-table-row-customer">
               <span>Name</span>
@@ -1513,8 +1694,8 @@ export function AdminScreen() {
               <span>Role</span>
               <span>Actions</span>
             </div>
-            {profiles.length === 0 ? <EmptyState title="No users yet" detail="Signed-up users will appear here." /> : null}
-            {profiles.map((profile) => (
+            {filteredProfiles.length === 0 ? <EmptyState title="No users found" detail="Try another search or role filter." /> : null}
+            {filteredProfiles.map((profile) => (
               <article key={profile.id} className="admin-table-row admin-table-row-customer">
                 <div><strong>{personName(profile)}</strong><span>{profile.profile_complete_percent ?? 0}% complete</span></div>
                 <div><strong>{profile.email ?? "No email"}</strong><span>{profile.phone ?? "No phone"}</span></div>
@@ -1540,9 +1721,16 @@ export function AdminScreen() {
               </div>
               <CreditCard size={20} />
             </div>
+            <div className="admin-filter-bar">
+              <input value={tableFilters.paymentsQuery} onChange={(event) => setTableFilter("paymentsQuery", event.target.value)} placeholder="Search payments or proofs" />
+              <select value={tableFilters.paymentsStatus} onChange={(event) => setTableFilter("paymentsStatus", event.target.value)}>
+                <option value="">All payment statuses</option>
+                {Array.from(new Set(payments.map((payment) => payment.status))).map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </div>
             <div className="admin-payment-list">
-              {activePayments.length === 0 ? <EmptyState title="No active payments" detail="Open customer payment records will appear here." /> : null}
-              {activePayments.map((payment) => (
+              {filteredActivePayments.length === 0 ? <EmptyState title="No payments found" detail="Try another search or payment status." /> : null}
+              {filteredActivePayments.map((payment) => (
                 <article key={payment.id} className="admin-payment-row">
                   <div className="admin-payment-title">
                     <strong>{payment.bookings?.booking_ref ?? "Payment"}</strong>
@@ -1574,8 +1762,8 @@ export function AdminScreen() {
               <FileCheck2 size={20} />
             </div>
             <div className="admin-proof-list">
-              {proofs.length === 0 ? <EmptyState title="No proofs uploaded" detail="User EFT or manual payment proofs will appear here." /> : null}
-              {proofs.map((proof) => (
+              {filteredProofs.length === 0 ? <EmptyState title="No proofs found" detail="Try another payment search." /> : null}
+              {filteredProofs.map((proof) => (
                 <article key={proof.id} className="admin-proof-row">
                   <div className="admin-proof-head">
                     <div>
@@ -1604,9 +1792,16 @@ export function AdminScreen() {
       {!loading && !error && activeTab === "Inquiries" ? (
         <section className="card">
           <div className="card-head"><h3>Partner inquiries</h3><Building2 size={20} /></div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.inquiriesQuery} onChange={(event) => setTableFilter("inquiriesQuery", event.target.value)} placeholder="Search inquiries" />
+            <select value={tableFilters.inquiriesCity} onChange={(event) => setTableFilter("inquiriesCity", event.target.value)}>
+              <option value="">All preferred cities</option>
+              {cities.map((city) => <option key={city.id} value={city.name}>{city.name}</option>)}
+            </select>
+          </div>
           <div className="admin-table">
-            {partnerInquiries.length === 0 ? <EmptyState title="No partner inquiries" detail="University, society, and partner messages will appear here." /> : null}
-            {partnerInquiries.map((inquiry) => (
+            {filteredPartnerInquiries.length === 0 ? <EmptyState title="No inquiries found" detail="Try another search or city filter." /> : null}
+            {filteredPartnerInquiries.map((inquiry) => (
               <article key={inquiry.id} className="admin-row compact">
                 <div><strong>{inquiry.name}</strong><span>{inquiry.inquiry_type} - {inquiry.organisation ?? inquiry.campus ?? "No organisation"}</span></div>
                 <div><span>{inquiry.preferred_city ?? "Any city"}</span><span>{formatDate(inquiry.created_at)}</span></div>
@@ -1624,6 +1819,9 @@ export function AdminScreen() {
             <h3>Cities</h3>
             <Button onClick={() => openCityForm()}>Add City</Button>
           </div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.citiesQuery} onChange={(event) => setTableFilter("citiesQuery", event.target.value)} placeholder="Search cities" />
+          </div>
           <div className="admin-data-table admin-data-table-cities">
             <div className="admin-table-head admin-table-row-city">
               <span>City</span>
@@ -1632,8 +1830,8 @@ export function AdminScreen() {
               <span>Trips</span>
               <span>Actions</span>
             </div>
-            {cities.length === 0 ? <EmptyState title="No cities yet" detail="City records will appear here." /> : null}
-            {cities.map((city) => (
+            {filteredCities.length === 0 ? <EmptyState title="No cities found" detail="Try another city search." /> : null}
+            {filteredCities.map((city) => (
               editingKey === `city-${city.id}` ? (
                 <article key={city.id} className="admin-table-row admin-table-row-city">
                   <div className="admin-edit-stack">
@@ -1917,17 +2115,56 @@ export function AdminScreen() {
               <div className="admin-modal-full admin-pickup-points">
                 <div className="admin-pickup-points-head">
                   <strong>Pickup points</strong>
-                  <button type="button" onClick={addTripPickupPoint}>Add pickup point</button>
                 </div>
-                {tripForm.pickup_points.map((point, index) => (
-                  <label key={index}>
-                    Pickup point {index + 1}
-                    <span className="admin-pickup-point-row">
-                      <input value={point} onChange={(event) => setTripPickupPoint(index, event.target.value)} placeholder={index === 0 ? "Cape Town Station" : "UCT upper university pickup"} />
-                      <button type="button" onClick={() => removeTripPickupPoint(index)}>Remove</button>
-                    </span>
-                  </label>
-                ))}
+                {selectedCityPickupPoints.length > 0 ? (
+                  <>
+                    <p className="admin-field-note">Choose the city pickup points this trip should allow, then select which one is the main meeting point.</p>
+                    <div className="admin-pickup-groups">
+                      {Object.entries(groupedSelectedCityPickupPoints).map(([area, points]) => (
+                        <section key={area} className="admin-pickup-group">
+                          <strong>{area}</strong>
+                          <div className="admin-pickup-checklist">
+                            {points.map((point) => (
+                              <label key={point.id} className="admin-pickup-option">
+                                <input
+                                  type="checkbox"
+                                  checked={tripForm.pickup_points.includes(point.point)}
+                                  onChange={() => toggleTripPickupPoint(point.point)}
+                                />
+                                <span>{point.point}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                    <label>
+                      Main meeting point
+                      <select value={tripForm.meeting_point} onChange={(event) => setTripFormValue("meeting_point", event.target.value)}>
+                        <option value="">Choose main meeting point</option>
+                        {tripForm.pickup_points.filter(Boolean).map((point) => (
+                          <option key={point} value={point}>{point}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <p className="admin-field-note">No structured pickup points found for this city yet. Add them manually below for now.</p>
+                    <div className="admin-pickup-points-head">
+                      <button type="button" onClick={addTripPickupPoint}>Add pickup point</button>
+                    </div>
+                    {tripForm.pickup_points.map((point, index) => (
+                      <label key={index}>
+                        Pickup point {index + 1}
+                        <span className="admin-pickup-point-row">
+                          <input value={point} onChange={(event) => setTripPickupPoint(index, event.target.value)} placeholder={index === 0 ? "Cape Town Station" : "UCT upper university pickup"} />
+                          <button type="button" onClick={() => removeTripPickupPoint(index)}>Remove</button>
+                        </span>
+                      </label>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
 
@@ -1947,6 +2184,9 @@ export function AdminScreen() {
             <h3>Updates</h3>
             <Button onClick={() => openUpdateForm()}>Add Update</Button>
           </div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.updatesQuery} onChange={(event) => setTableFilter("updatesQuery", event.target.value)} placeholder="Search updates" />
+          </div>
           <div className="admin-data-table admin-data-table-updates">
             <div className="admin-table-head admin-table-row-update">
               <span>Update</span>
@@ -1954,8 +2194,8 @@ export function AdminScreen() {
               <span>State</span>
               <span>Actions</span>
             </div>
-            {updates.length === 0 ? <EmptyState title="No updates yet" detail="Published news and operational updates will appear here." /> : null}
-            {updates.map((update) => (
+            {filteredUpdates.length === 0 ? <EmptyState title="No updates found" detail="Try another update search." /> : null}
+            {filteredUpdates.map((update) => (
               <article key={update.id} className="admin-table-row admin-table-row-update">
                 <div><strong>{update.title}</strong><span>{update.body}{update.banner_special_collection_slug ? ` -> ${update.banner_special_collection_slug}` : ""}</span></div>
                 <div><strong>{formatDate(update.published_on)}</strong><span>{formatDate(update.created_at)}</span></div>
@@ -1976,6 +2216,14 @@ export function AdminScreen() {
             <h3>Reviews</h3>
             <Button onClick={() => openReviewForm()}>Add Review</Button>
           </div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.reviewsQuery} onChange={(event) => setTableFilter("reviewsQuery", event.target.value)} placeholder="Search reviews" />
+            <select value={tableFilters.reviewsState} onChange={(event) => setTableFilter("reviewsState", event.target.value)}>
+              <option value="">All states</option>
+              <option value="Published">Published</option>
+              <option value="Pending">Pending</option>
+            </select>
+          </div>
           <div className="admin-data-table admin-data-table-reviews">
             <div className="admin-table-head admin-table-row-review">
               <span>Author</span>
@@ -1984,8 +2232,8 @@ export function AdminScreen() {
               <span>State</span>
               <span>Actions</span>
             </div>
-            {reviews.length === 0 ? <EmptyState title="No reviews yet" detail="User review submissions will appear here." /> : null}
-            {reviews.map((review) => (
+            {filteredReviews.length === 0 ? <EmptyState title="No reviews found" detail="Try another search or review state." /> : null}
+            {filteredReviews.map((review) => (
               editingKey === `review-${review.id}` ? (
                 <article key={review.id} className="admin-table-row admin-table-row-review">
                   <input value={String(editingValues.author_name ?? "")} onChange={(event) => setEditingValue("author_name", event.target.value)} />
@@ -2036,6 +2284,9 @@ export function AdminScreen() {
           <div className="card-head">
             <h3>Activity Logs</h3>
           </div>
+          <div className="admin-filter-bar">
+            <input value={tableFilters.logsQuery} onChange={(event) => setTableFilter("logsQuery", event.target.value)} placeholder="Search logs" />
+          </div>
           <div className="admin-data-table admin-data-table-logs">
             <div className="admin-table-head admin-table-row-log">
               <span>When</span>
@@ -2043,8 +2294,8 @@ export function AdminScreen() {
               <span>Action</span>
               <span>Record</span>
             </div>
-            {activityLogs.length === 0 ? <EmptyState title="No activity logs yet" detail="Admin and branch actions will appear here once changes are made." /> : null}
-            {activityLogs.map((log) => (
+            {filteredActivityLogs.length === 0 ? <EmptyState title="No logs found" detail="Try another log search." /> : null}
+            {filteredActivityLogs.map((log) => (
               <article key={log.id} className="admin-table-row admin-table-row-log">
                 <div>
                   <strong>{formatDate(log.created_at)}</strong>

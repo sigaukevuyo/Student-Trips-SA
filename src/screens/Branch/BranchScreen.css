@@ -25,6 +25,26 @@
   margin-top: 16px;
 }
 
+.branch-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.branch-filter-bar input,
+.branch-filter-bar select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+  color: var(--primary);
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 700;
+}
+
 .branch-table-row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.8fr) auto;
@@ -256,6 +276,58 @@
   resize: vertical;
 }
 
+.branch-pickup-points {
+  display: grid;
+  gap: 12px;
+}
+
+.branch-pickup-points > strong {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.branch-pickup-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.branch-pickup-group {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dce6ef;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.branch-pickup-group strong {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.branch-pickup-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.branch-pickup-option {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.branch-pickup-option input {
+  width: 16px;
+  min-height: 16px;
+  margin: 0;
+}
+
 .branch-pricing-note {
   display: grid;
   gap: 6px;
@@ -328,7 +400,8 @@
 
 @media (max-width: 980px) {
   .branch-dashboard-grid,
-  .branch-table-row {
+  .branch-table-row,
+  .branch-filter-bar {
     grid-template-columns: 1fr;
   }
 
@@ -338,6 +411,10 @@
   }
 
   .branch-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-pickup-checklist {
     grid-template-columns: 1fr;
   }
 

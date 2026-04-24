@@ -140,6 +140,25 @@ create table if not exists public.cities (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.city_pickup_points (
+  id uuid primary key default gen_random_uuid(),
+  city_id uuid not null references public.cities(id) on delete cascade,
+  area text not null,
+  point text not null,
+  sort_order integer not null default 0,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (city_id, area, point)
+);
+
+create index if not exists city_pickup_points_city_id_idx on public.city_pickup_points(city_id);
+create index if not exists city_pickup_points_sort_idx on public.city_pickup_points(city_id, sort_order, area, point);
+
+create or replace trigger city_pickup_points_set_updated_at
+before update on public.city_pickup_points
+for each row execute function public.set_updated_at();
+
 alter table public.profiles add column if not exists branch_city_id uuid references public.cities(id) on delete set null;
 create index if not exists profiles_branch_city_id_idx on public.profiles(branch_city_id);
 
@@ -727,6 +746,7 @@ using (
 alter table public.profiles enable row level security;
 alter table public.branch_manager_assignments enable row level security;
 alter table public.cities enable row level security;
+alter table public.city_pickup_points enable row level security;
 alter table public.trips enable row level security;
 alter table public.bookings enable row level security;
 alter table public.payments enable row level security;
@@ -768,6 +788,19 @@ using (active = true or public.is_staff());
 drop policy if exists "cities staff manage" on public.cities;
 create policy "cities staff manage"
 on public.cities for all
+to authenticated
+using (public.is_staff())
+with check (public.is_staff());
+
+drop policy if exists "city pickup points public read active" on public.city_pickup_points;
+create policy "city pickup points public read active"
+on public.city_pickup_points for select
+to anon, authenticated
+using (active = true or public.is_staff());
+
+drop policy if exists "city pickup points staff manage" on public.city_pickup_points;
+create policy "city pickup points staff manage"
+on public.city_pickup_points for all
 to authenticated
 using (public.is_staff())
 with check (public.is_staff());

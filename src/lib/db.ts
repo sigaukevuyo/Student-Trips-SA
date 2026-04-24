@@ -43,7 +43,7 @@ export type DbTrip = {
   special_collection_slug: string | null;
   featured: boolean | null;
   tags: string[] | null;
-  cities?: { name: string | null } | null;
+  cities?: { id: string | null; slug: string | null; name: string | null } | null;
 };
 
 export function deriveTripStatus(capacity: number, seatsRemaining: number): Trip["status"] {
@@ -63,6 +63,8 @@ export function dbTripToTrip(trip: DbTrip): Trip {
     id: trip.id,
     slug: trip.slug,
     title: trip.title,
+    cityId: trip.cities?.id ?? null,
+    citySlug: trip.cities?.slug ?? null,
     city: trip.cities?.name ?? "South Africa",
     category: trip.category,
     image: trip.image_url ?? "",
@@ -87,4 +89,4 @@ export function dbTripToTrip(trip: DbTrip): Trip {
 }
 
 export const tripSelect =
-  "id,slug,title,category,image_url,summary,meeting_point,pickup_points,start_date,duration,price_cents,community_price_cents,non_community_price_cents,original_price_cents,deposit_cents,seats_remaining,capacity,status,is_special,special_collection_slug,featured,tags,cities(name)";
+  "id,slug,title,category,image_url,summary,meeting_point,pickup_points,start_date,duration,price_cents,community_price_cents,non_community_price_cents,original_price_cents,deposit_cents,seats_remaining,capacity,status,is_special,special_collection_slug,featured,tags,cities(id,slug,name)";

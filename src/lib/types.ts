@@ -4,6 +4,8 @@ export type Trip = {
   id: string;
   slug: string;
   title: string;
+  cityId: string | null;
+  citySlug: string | null;
   city: string;
   category: string;
   image: string;
@@ -24,6 +26,14 @@ export type Trip = {
   summary: string;
   meetingPoint: string;
   pickupPoints: string[];
+};
+
+export type CityPickupPoint = {
+  id: string;
+  cityId: string;
+  area: string;
+  point: string;
+  sortOrder: number;
 };
 
 export type Booking = {

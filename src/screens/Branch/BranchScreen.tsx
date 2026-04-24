@@ -86,6 +86,14 @@ type BranchReview = {
   trips: { title: string | null } | null;
 };
 
+type BranchPickupPoint = {
+  id: string;
+  city_id: string;
+  area: string;
+  point: string;
+  sort_order: number;
+};
+
 const branchTabs = ["Overview", "Trips", "Bookings", "Customers", "Payments", "Reviews", "Reports"];
 
 function personName(profile: Pick<BranchProfile, "first_name" | "last_name" | "email"> | null) {
@@ -101,6 +109,11 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function includesBranchText(value: string | null | undefined, query: string) {
+  if (!query.trim()) return true;
+  return (value ?? "").toLowerCase().includes(query.trim().toLowerCase());
+}
+
 export function BranchScreen() {
   const [profile, setProfile] = useState<BranchProfile | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -110,6 +123,7 @@ export function BranchScreen() {
   const [inquiries, setInquiries] = useState<BranchInquiry[]>([]);
   const [customers, setCustomers] = useState<BranchCustomer[]>([]);
   const [reviews, setReviews] = useState<BranchReview[]>([]);
+  const [branchPickupPoints, setBranchPickupPoints] = useState<BranchPickupPoint[]>([]);
   const [activeTab, setActiveTab] = useState(branchTabs[0]);
   const [showTripModal, setShowTripModal] = useState(false);
   const [saving, setSaving] = useState("");
@@ -119,6 +133,7 @@ export function BranchScreen() {
     category: "",
     summary: "",
     meeting_point: "",
+    pickup_points: [""],
     start_date: "",
     duration: "",
     community_price: "",
@@ -132,6 +147,17 @@ export function BranchScreen() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tableFilters, setTableFilters] = useState({
+    tripsQuery: "",
+    tripsStatus: "",
+    bookingsQuery: "",
+    bookingsStatus: "",
+    customersQuery: "",
+    paymentsQuery: "",
+    paymentsStatus: "",
+    reviewsQuery: "",
+    reviewsState: "",
+  });
 
   const loadBranch = useCallback(async (mounted = true) => {
       setLoading(true);
@@ -184,7 +210,7 @@ export function BranchScreen() {
       const cityId = branchProfile.branch_city_id;
       const cityName = branchProfile.cities?.name ?? "";
 
-      const [tripResult, bookingResult, paymentResult, proofResult, inquiryResult, reviewResult] = await Promise.all([
+      const [tripResult, bookingResult, paymentResult, proofResult, inquiryResult, reviewResult, pickupPointResult] = await Promise.all([
         supabase.from("trips").select(tripSelect).eq("city_id", cityId).order("start_date").limit(50),
         supabase
           .from("bookings")
@@ -216,11 +242,19 @@ export function BranchScreen() {
           .eq("trips.city_id", cityId)
           .order("created_at", { ascending: false })
           .limit(100),
+        supabase
+          .from("city_pickup_points")
+          .select("id,city_id,area,point,sort_order")
+          .eq("city_id", cityId)
+          .eq("active", true)
+          .order("sort_order")
+          .order("area")
+          .order("point"),
       ]);
 
       if (!mounted) return;
 
-      const firstError = tripResult.error ?? bookingResult.error ?? paymentResult.error ?? proofResult.error ?? inquiryResult.error ?? reviewResult.error;
+      const firstError = tripResult.error ?? bookingResult.error ?? paymentResult.error ?? proofResult.error ?? inquiryResult.error ?? reviewResult.error ?? pickupPointResult.error;
       if (firstError) {
         setError(friendlyError(firstError, "We could not load branch data right now. Please try again."));
       }
@@ -231,6 +265,7 @@ export function BranchScreen() {
       setProofs((proofResult.data as unknown as BranchProof[] | null) ?? []);
       setInquiries((inquiryResult.data as BranchInquiry[] | null) ?? []);
       setReviews((reviewResult.data as unknown as BranchReview[] | null) ?? []);
+      setBranchPickupPoints((pickupPointResult.data as BranchPickupPoint[] | null) ?? []);
 
       const userIds = Array.from(new Set(((bookingResult.data as unknown as BranchBooking[] | null) ?? []).map((booking) => booking.user_id)));
       if (userIds.length > 0) {
@@ -261,6 +296,10 @@ export function BranchScreen() {
     };
   }, [loadBranch]);
 
+  function setTableFilter(field: keyof typeof tableFilters, value: string) {
+    setTableFilters((current) => ({ ...current, [field]: value }));
+  }
+
   function setTripFormValue(field: keyof typeof tripForm, value: string) {
     setTripForm((current) => {
       if (field === "title" && (!current.slug || current.slug === slugify(current.title))) {
@@ -278,6 +317,7 @@ export function BranchScreen() {
       category: "",
       summary: "",
       meeting_point: "",
+      pickup_points: [""],
       start_date: "",
       duration: "",
       community_price: "",
@@ -288,6 +328,24 @@ export function BranchScreen() {
       seats_remaining: "",
       is_special: false,
       special_collection_slug: "",
+    });
+  }
+
+  function toggleTripPickupPoint(point: string) {
+    setTripForm((current) => {
+      const exists = current.pickup_points.includes(point);
+      const nextPickupPoints = exists ? current.pickup_points.filter((item) => item !== point) : [...current.pickup_points.filter(Boolean), point];
+      const sanitizedPickupPoints = nextPickupPoints.length > 0 ? nextPickupPoints : [""];
+      const nextMeetingPoint =
+        current.meeting_point && sanitizedPickupPoints.includes(current.meeting_point)
+          ? current.meeting_point
+          : sanitizedPickupPoints.find(Boolean) ?? "";
+
+      return {
+        ...current,
+        pickup_points: sanitizedPickupPoints,
+        meeting_point: nextMeetingPoint,
+      };
     });
   }
 
@@ -337,7 +395,7 @@ export function BranchScreen() {
       category: tripForm.category.trim(),
       summary: tripForm.summary.trim() || null,
       meeting_point: tripForm.meeting_point.trim() || null,
-      pickup_points: tripForm.meeting_point.trim() ? [tripForm.meeting_point.trim()] : [],
+      pickup_points: tripForm.pickup_points.map((point) => point.trim()).filter(Boolean),
       start_date: tripForm.start_date,
       duration: tripForm.duration.trim() || null,
       price_cents: communityPriceCents,
@@ -535,6 +593,68 @@ export function BranchScreen() {
   const pendingProofs = useMemo(() => proofs.filter((proof) => proof.approved === null).length, [proofs]);
   const activeTrips = useMemo(() => trips.filter((trip) => trip.status !== "SOLD_OUT"), [trips]);
   const customerById = useMemo(() => Object.fromEntries(customers.map((customer) => [customer.id, customer])), [customers]);
+  const groupedBranchPickupPoints = useMemo(
+    () =>
+      branchPickupPoints.reduce<Record<string, BranchPickupPoint[]>>((groups, item) => {
+        groups[item.area] = [...(groups[item.area] ?? []), item];
+        return groups;
+      }, {}),
+    [branchPickupPoints],
+  );
+  const filteredTrips = useMemo(
+    () =>
+      trips.filter((trip) => {
+        const matchesQuery = includesBranchText(`${trip.title} ${trip.category} ${trip.city}`, tableFilters.tripsQuery);
+        const matchesStatus = !tableFilters.tripsStatus || trip.status === tableFilters.tripsStatus;
+        return matchesQuery && matchesStatus;
+      }),
+    [tableFilters.tripsQuery, tableFilters.tripsStatus, trips],
+  );
+  const filteredBookings = useMemo(
+    () =>
+      bookings.filter((booking) => {
+        const customer = customerById[booking.user_id];
+        const matchesQuery = includesBranchText(`${booking.booking_ref} ${booking.trips?.title ?? ""} ${personName(customer ?? null)} ${customer?.email ?? ""}`, tableFilters.bookingsQuery);
+        const matchesStatus = !tableFilters.bookingsStatus || booking.status === tableFilters.bookingsStatus;
+        return matchesQuery && matchesStatus;
+      }),
+    [bookings, customerById, tableFilters.bookingsQuery, tableFilters.bookingsStatus],
+  );
+  const filteredCustomers = useMemo(
+    () => customers.filter((customer) => includesBranchText(`${personName(customer)} ${customer.email ?? ""} ${customer.phone ?? ""}`, tableFilters.customersQuery)),
+    [customers, tableFilters.customersQuery],
+  );
+  const filteredProofs = useMemo(
+    () =>
+      proofs.filter((proof) => {
+        const matchesQuery = includesBranchText(`${proof.bookings?.booking_ref ?? ""} ${proof.file_name ?? ""} ${proof.bookings?.trips?.title ?? ""}`, tableFilters.paymentsQuery);
+        const matchesStatus =
+          !tableFilters.paymentsStatus ||
+          (tableFilters.paymentsStatus === "Pending" && proof.approved === null) ||
+          (tableFilters.paymentsStatus === "Approved" && proof.approved === true) ||
+          (tableFilters.paymentsStatus === "Rejected" && proof.approved === false);
+        return matchesQuery && matchesStatus;
+      }),
+    [proofs, tableFilters.paymentsQuery, tableFilters.paymentsStatus],
+  );
+  const filteredPayments = useMemo(
+    () =>
+      payments.filter((payment) => {
+        const matchesQuery = includesBranchText(`${payment.bookings?.booking_ref ?? ""} ${payment.bookings?.trips?.title ?? ""} ${payment.method}`, tableFilters.paymentsQuery);
+        const matchesStatus = !tableFilters.paymentsStatus || payment.status === tableFilters.paymentsStatus;
+        return matchesQuery && matchesStatus;
+      }),
+    [payments, tableFilters.paymentsQuery, tableFilters.paymentsStatus],
+  );
+  const filteredReviews = useMemo(
+    () =>
+      reviews.filter((review) => {
+        const matchesQuery = includesBranchText(`${review.author_name} ${review.quote} ${review.trips?.title ?? ""}`, tableFilters.reviewsQuery);
+        const matchesState = !tableFilters.reviewsState || (tableFilters.reviewsState === "Published" ? review.published : !review.published);
+        return matchesQuery && matchesState;
+      }),
+    [reviews, tableFilters.reviewsQuery, tableFilters.reviewsState],
+  );
 
   return (
     <RoleShell
@@ -631,9 +751,16 @@ export function BranchScreen() {
             <h3>Trips</h3>
             <button className="branch-add-button" type="button" onClick={() => setShowTripModal(true)}>Add Trip</button>
           </div>
+          <div className="branch-filter-bar">
+            <input value={tableFilters.tripsQuery} onChange={(event) => setTableFilter("tripsQuery", event.target.value)} placeholder="Search trips" />
+            <select value={tableFilters.tripsStatus} onChange={(event) => setTableFilter("tripsStatus", event.target.value)}>
+              <option value="">All statuses</option>
+              {Array.from(new Set(trips.map((trip) => trip.status))).map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </div>
           <div className="branch-table">
-            {trips.length === 0 ? <div className="app-empty-state"><p>No trips for this branch yet.</p></div> : null}
-            {trips.map((trip) => (
+            {filteredTrips.length === 0 ? <div className="app-empty-state"><p>No trips found for those filters.</p></div> : null}
+            {filteredTrips.map((trip) => (
               <article key={trip.id} className="branch-table-row">
                 <div><strong>{trip.title}</strong><span>{trip.category}</span></div>
                 <div><strong>{formatDate(trip.startDate)}</strong><span>{trip.seatsRemaining} seats left</span></div>
@@ -647,9 +774,16 @@ export function BranchScreen() {
       {!loading && !error && activeTab === "Bookings" ? (
         <section className="card">
           <div className="card-head"><h3>Bookings</h3><CreditCard size={20} /></div>
+          <div className="branch-filter-bar">
+            <input value={tableFilters.bookingsQuery} onChange={(event) => setTableFilter("bookingsQuery", event.target.value)} placeholder="Search bookings" />
+            <select value={tableFilters.bookingsStatus} onChange={(event) => setTableFilter("bookingsStatus", event.target.value)}>
+              <option value="">All statuses</option>
+              {Array.from(new Set(bookings.map((booking) => booking.status))).map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </div>
           <div className="branch-table">
-            {bookings.length === 0 ? <div className="app-empty-state"><p>No bookings for this branch yet.</p></div> : null}
-            {bookings.map((booking) => {
+            {filteredBookings.length === 0 ? <div className="app-empty-state"><p>No bookings found for those filters.</p></div> : null}
+            {filteredBookings.map((booking) => {
               const customer = customerById[booking.user_id];
               return (
                 <article key={booking.id} className="branch-table-row">
@@ -666,9 +800,12 @@ export function BranchScreen() {
       {!loading && !error && activeTab === "Customers" ? (
         <section className="card">
           <div className="card-head"><h3>Customers</h3><Users size={20} /></div>
+          <div className="branch-filter-bar">
+            <input value={tableFilters.customersQuery} onChange={(event) => setTableFilter("customersQuery", event.target.value)} placeholder="Search customers" />
+          </div>
           <div className="branch-table">
-            {customers.length === 0 ? <div className="app-empty-state"><p>No customers for this branch yet.</p></div> : null}
-            {customers.map((customer) => (
+            {filteredCustomers.length === 0 ? <div className="app-empty-state"><p>No customers found for that search.</p></div> : null}
+            {filteredCustomers.map((customer) => (
               <article key={customer.id} className="branch-table-row">
                 <div><strong>{personName(customer)}</strong><span>{customer.email ?? "No email"}</span></div>
                 <div><strong>{customer.phone ?? "No phone"}</strong><span>{bookings.filter((booking) => booking.user_id === customer.id).length} bookings</span></div>
@@ -682,9 +819,19 @@ export function BranchScreen() {
       {!loading && !error && activeTab === "Payments" ? (
         <section className="card">
           <div className="card-head"><h3>Payments</h3><CreditCard size={20} /></div>
+          <div className="branch-filter-bar">
+            <input value={tableFilters.paymentsQuery} onChange={(event) => setTableFilter("paymentsQuery", event.target.value)} placeholder="Search payments or proofs" />
+            <select value={tableFilters.paymentsStatus} onChange={(event) => setTableFilter("paymentsStatus", event.target.value)}>
+              <option value="">All statuses</option>
+              <option value="Pending">Pending proof review</option>
+              <option value="Approved">Approved proofs</option>
+              <option value="Rejected">Rejected proofs</option>
+              {Array.from(new Set(payments.map((payment) => payment.status))).map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </div>
           <div className="branch-proof-list">
-            {proofs.length === 0 ? <div className="app-empty-state"><p>No payment proofs for this branch yet.</p></div> : null}
-            {proofs.map((proof) => (
+            {filteredProofs.length === 0 ? <div className="app-empty-state"><p>No payment proofs found for those filters.</p></div> : null}
+            {filteredProofs.map((proof) => (
               <article key={proof.id} className="branch-proof-row">
                 <div className="branch-proof-head">
                   <div>
@@ -707,8 +854,8 @@ export function BranchScreen() {
             ))}
           </div>
           <div className="branch-table">
-            {payments.length === 0 ? <div className="app-empty-state"><p>No payments for this branch yet.</p></div> : null}
-            {payments.map((payment) => (
+            {filteredPayments.length === 0 ? <div className="app-empty-state"><p>No payments found for those filters.</p></div> : null}
+            {filteredPayments.map((payment) => (
               <article key={payment.id} className="branch-table-row">
                 <div><strong>{payment.bookings?.booking_ref ?? "Payment"}</strong><span>{payment.bookings?.trips?.title ?? payment.method}</span></div>
                 <div><strong>{formatMoney(payment.amount_cents)}</strong><span>{formatDate(payment.created_at)}</span></div>
@@ -722,9 +869,17 @@ export function BranchScreen() {
       {!loading && !error && activeTab === "Reviews" ? (
         <section className="card">
           <div className="card-head"><h3>Reviews</h3><MessageSquare size={20} /></div>
+          <div className="branch-filter-bar">
+            <input value={tableFilters.reviewsQuery} onChange={(event) => setTableFilter("reviewsQuery", event.target.value)} placeholder="Search reviews" />
+            <select value={tableFilters.reviewsState} onChange={(event) => setTableFilter("reviewsState", event.target.value)}>
+              <option value="">All states</option>
+              <option value="Published">Published</option>
+              <option value="Pending">Pending</option>
+            </select>
+          </div>
           <div className="branch-review-list">
-            {reviews.length === 0 ? <div className="app-empty-state"><p>No customer reviews for this branch yet.</p></div> : null}
-            {reviews.map((review) => (
+            {filteredReviews.length === 0 ? <div className="app-empty-state"><p>No reviews found for those filters.</p></div> : null}
+            {filteredReviews.map((review) => (
               <article key={review.id} className="branch-review-row">
                 <div className="branch-review-head">
                   <div>
@@ -797,7 +952,12 @@ export function BranchScreen() {
               </label>
               <label>
                 Meeting point
-                <input value={tripForm.meeting_point} onChange={(event) => setTripFormValue("meeting_point", event.target.value)} placeholder="Main university pickup" />
+                <select value={tripForm.meeting_point} onChange={(event) => setTripFormValue("meeting_point", event.target.value)}>
+                  <option value="">Choose main meeting point</option>
+                  {tripForm.pickup_points.filter(Boolean).map((point) => (
+                    <option key={point} value={point}>{point}</option>
+                  ))}
+                </select>
               </label>
               <label>
                 Community price
@@ -842,6 +1002,35 @@ export function BranchScreen() {
                 Summary
                 <textarea value={tripForm.summary} onChange={(event) => setTripFormValue("summary", event.target.value)} rows={3} placeholder="A social escape with safe group transport." />
               </label>
+              <div className="branch-modal-full branch-pickup-points">
+                <strong>Pickup points</strong>
+                {branchPickupPoints.length > 0 ? (
+                  <>
+                    <p className="branch-field-note">Choose the branch pickup points this trip should allow, then select which one is the main meeting point above.</p>
+                    <div className="branch-pickup-groups">
+                      {Object.entries(groupedBranchPickupPoints).map(([area, points]) => (
+                        <section key={area} className="branch-pickup-group">
+                          <strong>{area}</strong>
+                          <div className="branch-pickup-checklist">
+                            {points.map((point) => (
+                              <label key={point.id} className="branch-pickup-option">
+                                <input
+                                  type="checkbox"
+                                  checked={tripForm.pickup_points.includes(point.point)}
+                                  onChange={() => toggleTripPickupPoint(point.point)}
+                                />
+                                <span>{point.point}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="branch-field-note">No structured pickup points have been added for this branch city yet.</p>
+                )}
+              </div>
             </div>
 
             <div className="branch-modal-actions">
