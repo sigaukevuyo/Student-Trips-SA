@@ -30,7 +30,7 @@ export function TripCard({
   const { resolveTripPricing } = usePricing();
   const nearlyFull = trip.status === "NEARLY_FULL";
   const soldOut = trip.status === "SOLD_OUT";
-  const badges = getTripBadges(trip);
+  const badges = getTripBadges(trip).filter((badge) => badge.toLowerCase() !== "freshers community");
   const pricing = resolveTripPricing(trip);
   const [canSaveFavorite, setCanSaveFavorite] = useState(false);
   const [isSaved, setIsSaved] = useState(initialSaved);
@@ -126,7 +126,7 @@ export function TripCard({
           ))}
         </div>
         <div className="trip-image-copy">
-          <span className="trip-status-pill">{soldOut ? "Sold Out" : nearlyFull ? "Nearly Full" : "Open"}</span>
+          {soldOut || nearlyFull ? <span className="trip-status-pill">{soldOut ? "Sold Out" : "Nearly Full"}</span> : null}
           <strong>{trip.category}</strong>
         </div>
       </div>
@@ -137,7 +137,6 @@ export function TripCard({
             <MapPin size={14} />
             {trip.city}
           </span>
-          <span>{trip.category}</span>
         </div>
         <h3 className="font-display">{trip.title}</h3>
         <p>{trip.summary}</p>

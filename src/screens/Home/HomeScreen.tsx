@@ -221,13 +221,17 @@ export function HomeScreen({
               <div className="home-trip-art">
                 {trip.image ? <img src={trip.image} alt={`${trip.title} destination`} /> : null}
                 <div className="home-trip-badges">
-                  {getTripBadges(trip).map((badge) => (
+                  {getTripBadges(trip)
+                    .filter((badge) => badge.toLowerCase() !== "freshers community")
+                    .map((badge) => (
                     <span key={badge}><Sparkles size={15} />{badge}</span>
                   ))}
                 </div>
                 <div className="home-trip-overlay-bottom">
                   <div>
-                    <span className="home-trip-status">{trip.status === "SOLD_OUT" ? "Sold Out" : trip.status === "NEARLY_FULL" ? "Nearly Full" : "Open"}</span>
+                    {trip.status === "SOLD_OUT" || trip.status === "NEARLY_FULL" ? (
+                      <span className="home-trip-status">{trip.status === "SOLD_OUT" ? "Sold Out" : "Nearly Full"}</span>
+                    ) : null}
                     <strong>{trip.category}</strong>
                   </div>
                 </div>
@@ -235,7 +239,6 @@ export function HomeScreen({
               <div className="home-trip-body">
                 <div className="home-trip-meta">
                   <span><MapPin size={15} />{trip.city}</span>
-                  <span>{trip.category}</span>
                 </div>
                 <h4 className="font-display">{trip.title}</h4>
                 <p>{trip.summary}</p>

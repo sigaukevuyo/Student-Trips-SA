@@ -60,7 +60,6 @@ export function TripDetailScreen({ trip, isLoggedIn, setView }: { trip: Trip | n
             <div className="trip-detail-visual-overlay" />
             <div className="trip-detail-visual-copy">
               <strong>Trip Preview</strong>
-              <span>Student Trips SA</span>
             </div>
             <span className="trip-detail-start-pill">Starts in {trip.city}</span>
           </div>
