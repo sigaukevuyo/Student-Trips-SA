@@ -70,7 +70,10 @@ export function TripsScreen({
     setSpecialCollection(initialFilters?.specialCollection ?? "");
   }, [initialFilters?.category, initialFilters?.city, initialFilters?.query, initialFilters?.specialCollection]);
 
-  const categories = useMemo(() => Array.from(new Set(trips.map((trip) => trip.category))).filter(Boolean), [trips]);
+  const categories = useMemo(
+    () => Array.from(new Set(trips.map((trip) => trip.category.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [trips],
+  );
 
   const filteredTrips = useMemo(
     () =>

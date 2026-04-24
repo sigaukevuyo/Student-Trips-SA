@@ -63,6 +63,7 @@ export function HomeScreen({
   const [searchCity, setSearchCity] = useState("");
   const [searchCategory, setSearchCategory] = useState("");
   const [cities, setCities] = useState<(DbCity & { tripCount: number })[]>([]);
+  const [tripCategories, setTripCategories] = useState<string[]>([]);
   const [featuredTrips, setFeaturedTrips] = useState<Trip[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [latestUpdate, setLatestUpdate] = useState<HomeUpdate | null>(null);
@@ -79,20 +80,26 @@ export function HomeScreen({
         return;
       }
 
-      const [cityResult, tripResult, reviewResult, updateResult] = await Promise.all([
+      const [cityResult, tripResult, categoryResult, reviewResult, updateResult] = await Promise.all([
         supabase.from("cities").select("id,slug,name,province,image_url,tagline,support_email,support_phone,trips(count)").eq("active", true).order("name").limit(6),
         supabase.from("trips").select(tripSelect).eq("published", true).gte("start_date", getTodayIsoDate()).order("created_at", { ascending: false }).limit(3),
+        supabase.from("trips").select("category").eq("published", true).gte("start_date", getTodayIsoDate()).order("category"),
         supabase.from("reviews").select("id,quote,author_name,rating").eq("published", true).order("created_at", { ascending: false }).limit(6),
         supabase.from("updates").select("id,title,body,banner_special_collection_slug").eq("published", true).order("published_on", { ascending: false }).limit(1).maybeSingle(),
       ]);
 
       if (!mounted) return;
 
-      if (cityResult.error || tripResult.error || reviewResult.error || updateResult.error) {
-        setError(friendlyError(cityResult.error ?? tripResult.error ?? reviewResult.error ?? updateResult.error, "Could not load home content."));
+      if (cityResult.error || tripResult.error || categoryResult.error || reviewResult.error || updateResult.error) {
+        setError(friendlyError(cityResult.error ?? tripResult.error ?? categoryResult.error ?? reviewResult.error ?? updateResult.error, "Could not load home content."));
       }
 
       setCities(((cityResult.data as unknown as DbCity[] | null) ?? []).map((city) => ({ ...city, tripCount: city.trips?.[0]?.count ?? 0 })));
+      setTripCategories(
+        Array.from(new Set((((categoryResult.data as { category: string | null }[] | null) ?? []).map((trip) => trip.category?.trim()).filter(Boolean) as string[]))).sort((a, b) =>
+          a.localeCompare(b),
+        ),
+      );
       setFeaturedTrips(((tripResult.data as unknown as DbTrip[] | null) ?? []).map(dbTripToTrip));
       setReviews((reviewResult.data as Review[] | null) ?? []);
       setLatestUpdate((updateResult.data as HomeUpdate | null) ?? null);
@@ -188,7 +195,7 @@ export function HomeScreen({
             Trip type
             <select value={searchCategory} onChange={(event) => setSearchCategory(event.target.value)}>
               <option value="">All trip types</option>
-              {Array.from(new Set(featuredTrips.map((trip) => trip.category))).map((category) => (
+              {tripCategories.map((category) => (
                 <option key={category} value={category}>{category}</option>
               ))}
             </select>
