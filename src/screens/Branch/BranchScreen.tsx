@@ -452,7 +452,7 @@ export function BranchScreen() {
       userName={personName(profile)}
       userRole="Branch Manager"
     >
-      {loading ? <section className="card app-empty-state"><ThemeLoader label="Loading branch data" /><p>Loading branch data...</p></section> : null}
+      {loading ? <section className="card app-empty-state"><ThemeLoader label="Loading branch dashboard" /><p>Loading branch dashboard...</p></section> : null}
       {error && !loading ? <section className="card app-empty-state"><h2>Branch data unavailable</h2><p>{error}</p></section> : null}
 
       {!loading && !error && activeTab === "Overview" ? (

@@ -195,7 +195,7 @@ export function HomeScreen({
         </div>
       </section>
 
-      {loading ? <div className="container app-empty-state"><ThemeLoader label="Loading home content" /><p>Loading live content...</p></div> : null}
+      {loading ? <div className="container app-empty-state"><ThemeLoader label="Loading home" /><p>Loading home...</p></div> : null}
       {error && !loading ? <div className="container app-empty-state"><h2>Something went wrong</h2><p>{error}</p></div> : null}
 
       <section className="home-section container">

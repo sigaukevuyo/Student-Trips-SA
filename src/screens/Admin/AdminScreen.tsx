@@ -1135,7 +1135,7 @@ export function AdminScreen() {
       userName={personName(currentProfile)}
       userRole="Admin"
     >
-      {loading ? <section className="card app-empty-state"><ThemeLoader label="Loading admin data" /><p>Loading admin data...</p></section> : null}
+      {loading ? <section className="card app-empty-state"><ThemeLoader label="Loading admin dashboard" /><p>Loading admin dashboard...</p></section> : null}
       {error && !loading ? <section className="card app-empty-state"><h2>Admin data unavailable</h2><p>{error}</p><Button onClick={loadAdmin}>Try again</Button></section> : null}
 
       {!loading && !error && activeTab === "Overview" ? (

@@ -189,7 +189,7 @@ export function OnboardingScreen({ setView }: { setView: (view: View) => void })
         {loading ? (
           <section className="onboarding-loading">
             <ThemeLoader label="Loading onboarding" />
-            <p>Loading your profile...</p>
+            <p>Loading onboarding...</p>
           </section>
         ) : (
           <>

@@ -1,6 +1,5 @@
 .policy-page {
-  min-height: 620px;
-  padding-block: 72px 64px;
+  padding-block: 56px 36px;
 }
 
 .policy-shell {
@@ -82,8 +81,7 @@
 
 @media (max-width: 640px) {
   .policy-page {
-    min-height: auto;
-    padding-block: 46px 34px;
+    padding-block: 40px 28px;
   }
 
   .policy-shell h1 {

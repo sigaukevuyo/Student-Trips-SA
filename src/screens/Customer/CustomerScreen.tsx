@@ -376,8 +376,8 @@ export function CustomerScreen({
       <div className="container customer-content">
         {loading ? (
           <section className="customer-loading card">
-            <ThemeLoader label="Loading dashboard" />
-            <p>Loading your dashboard...</p>
+            <ThemeLoader label="Loading customer dashboard" />
+            <p>Loading customer dashboard...</p>
           </section>
         ) : null}
 

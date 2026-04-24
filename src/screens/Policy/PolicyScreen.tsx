@@ -21,9 +21,15 @@ const policies: Record<PolicyView, PolicyContent> = {
     intro: "By booking with Student Trips SA, you agree to payment timelines, conduct policies, and safety instructions.",
     sections: [
       {
-        paragraphs: [
+        list: [
           "Trip itineraries may be adjusted for weather, safety, or supplier constraints with reasonable notice.",
           "Bookings are subject to capacity limits, waitlist rules, and city-specific operational decisions.",
+          "Participants must meet minimum age requirements for each trip. The minimum age is stated in the trip description.",
+          "Minors under 18 must provide signed parental or guardian consent.",
+          "Adults are responsible for themselves, and guardians are responsible for minors.",
+          " Provide accurate personal, medical, and emergency contact information.",
+          "Follow all instructions from staff and activity providers. Misbehavior may lead to removal from the Trip without refund.",
+          "Comply with the rules of all accommodations, transport providers, and activity venues.",
         ],
       },
     ],
@@ -34,9 +40,11 @@ const policies: Record<PolicyView, PolicyContent> = {
     intro: "We collect booking and profile data needed to manage trips, safety requirements, and payment records.",
     sections: [
       {
-        paragraphs: [
-          "Personal data is handled by authorized operational staff and role-based dashboards only.",
-          "For local development, files and proofs are stored locally; production storage should be configured securely.",
+        list: [
+          "We collect personal information for bookings, communication, and trip management.",
+          "Data is handled in compliance with POPIA.",
+          "Personal information will not be shared except as required for service provision or by law.",
+          "Data is retained only as necessary for administrative purposes.",
         ],
       },
     ],
@@ -44,12 +52,41 @@ const policies: Record<PolicyView, PolicyContent> = {
   refund: {
     eyebrow: "Bookings",
     title: "Refund & Cancellation Policy",
-    intro: "Cancellation requests are submitted from customer bookings and reviewed by admin before approval.",
+    intro: "We understand that sometimes plans may change. To protect both our travelers and our operational costs, the following refund terms apply to all bookings.",
     sections: [
       {
-        paragraphs: [
-          "Approved refunds are reflected as Refund Pending and then Refunded once processed.",
-          "Timing and eligibility depend on trip departure dates and supplier commitments.",
+        heading: "1. Deposits",
+        list: [
+          "All deposits are non-refundable, regardless of when you cancel.",
+          "Deposits secure your spot and cover upfront administrative and reservation costs.",
+        ],
+      },
+      {
+        heading: "2. Cancellation & Refund Schedule",
+        list: [
+          "28 days or more before departure: You are eligible for a 70% refund of the total trip price, excluding the deposit.",
+          "23-27 days before departure: You are eligible for a 50% refund of the total trip price, excluding the deposit.",
+          "15-22 days before departure: You are eligible for a 25% refund of the total trip price, excluding the deposit.",
+          "14 days or less before departure, or no-show: No refund will be issued.",
+          "In all cases, travelers may transfer their booking to another person up to 7 days before departure, subject to approval and an administrative fee.",
+        ],
+      },
+      {
+        heading: "3. No-Shows",
+        list: [
+          "If you do not arrive for the trip, you will not be entitled to any refund, regardless of circumstances.",
+        ],
+      },
+      {
+        heading: "4. Special Circumstances",
+        list: [
+          "Refunds outside of the schedule above are not guaranteed and are solely at the discretion of Student Trips SA.",
+          "Medical exceptions: proof of medical emergency may allow discretionary refunds.",
+          "Trip postponement or substitutions: participants may reschedule before final payment, subject to availability.",
+          "Participants may nominate a substitute, subject to approval.",
+          "Cancellations by Student Trips SA: trips may be canceled due to low bookings, weather, or unforeseen circumstances. Participants will receive a full refund or an alternative trip.",
+          "Student Trips SA is not liable for additional costs incurred by participants, such as travel to the departure point.",
+          "Booking fees, optional extras, or deposits paid to third-party providers are non-refundable.",
         ],
       },
     ],
