@@ -1155,7 +1155,8 @@ select {
   font-size: 12px;
   line-height: 1.5;
   margin-top: 8px !important;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   text-align: left;
 }
 
