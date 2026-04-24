@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { useCurrency } from "../../lib/currency";
 import { formatDate } from "../../lib/data";
+import { usePricing } from "../../lib/pricing";
 import { supabase } from "../../lib/supabase";
 import { getTripBadges } from "../../lib/tripBadges";
 import type { Trip } from "../../lib/types";
@@ -26,9 +27,11 @@ export function TripCard({
   onViewTrip?: (trip: Trip) => void;
 }) {
   const { formatTripMoney } = useCurrency();
+  const { resolveTripPricing } = usePricing();
   const nearlyFull = trip.status === "NEARLY_FULL";
   const soldOut = trip.status === "SOLD_OUT";
   const badges = getTripBadges(trip);
+  const pricing = resolveTripPricing(trip);
   const [canSaveFavorite, setCanSaveFavorite] = useState(false);
   const [isSaved, setIsSaved] = useState(initialSaved);
   const [savingFavorite, setSavingFavorite] = useState(false);
@@ -148,10 +151,10 @@ export function TripCard({
             {trip.seatsRemaining} seats left
           </span>
           <strong className="trip-price-stack">
-            {trip.originalPrice && trip.originalPrice > trip.price ? <span>{formatTripMoney(trip.originalPrice)}</span> : null}
-            <em>From {formatTripMoney(trip.price)}</em>
+            {pricing.comparePrice ? <span>{formatTripMoney(pricing.comparePrice)}</span> : null}
+            <em>From {formatTripMoney(pricing.price)}</em>
           </strong>
-          <strong>Deposit {formatTripMoney(trip.deposit)}</strong>
+          <strong>Deposit {formatTripMoney(pricing.deposit)}</strong>
         </div>
         <div className="trip-card-actions">
           <button type="button" onClick={() => onViewTrip?.(trip)}>View Trip</button>

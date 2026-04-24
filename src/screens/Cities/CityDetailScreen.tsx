@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { dbTripToTrip, tripSelect, type DbTrip } from "../../lib/db";
+import { dbTripToTrip, getTodayIsoDate, tripSelect, type DbTrip } from "../../lib/db";
 import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
@@ -43,6 +43,7 @@ export function CityDetailScreen({
         .select(tripSelect)
         .eq("city_id", city.id)
         .eq("published", true)
+        .gte("start_date", getTodayIsoDate())
         .order("start_date");
 
       if (!mounted) return;

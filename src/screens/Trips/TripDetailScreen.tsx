@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { useCurrency } from "../../lib/currency";
 import { formatDate } from "../../lib/data";
+import { usePricing } from "../../lib/pricing";
 import type { Trip } from "../../lib/types";
 import type { View } from "../../shared/navigation";
 import "./TripDetailScreen.css";
@@ -12,6 +13,7 @@ const detailTabs = ["Overview", "Full Itinerary", "Tour Details"];
 export function TripDetailScreen({ trip, isLoggedIn, setView }: { trip: Trip | null; isLoggedIn: boolean; setView: (view: View) => void }) {
   const [activeTab, setActiveTab] = useState("Overview");
   const { formatTripMoney, priceNotice } = useCurrency();
+  const { resolveTripPricing } = usePricing();
 
   if (!trip) {
     return (
@@ -29,6 +31,7 @@ export function TripDetailScreen({ trip, isLoggedIn, setView }: { trip: Trip | n
   const nearlyFull = trip.status === "NEARLY_FULL";
   const bookingDeadline = formatDate(trip.startDate);
   const pickupPoints = trip.pickupPoints.length > 0 ? trip.pickupPoints : ["Main university pickup"];
+  const pricing = resolveTripPricing(trip);
 
   return (
     <main className="trip-detail-page">
@@ -124,15 +127,15 @@ export function TripDetailScreen({ trip, isLoggedIn, setView }: { trip: Trip | n
         <aside className="trip-detail-sidebar">
           <section className="card trip-booking-card">
             <h2>Book This Trip</h2>
-            {trip.originalPrice && trip.originalPrice > trip.price ? (
+            {pricing.comparePrice ? (
               <div className="trip-detail-price-block">
-                <span>Was {formatTripMoney(trip.originalPrice)}</span>
-                <strong>Now {formatTripMoney(trip.price)}</strong>
+                <span>Was {formatTripMoney(pricing.comparePrice)}</span>
+                <strong>Now {formatTripMoney(pricing.price)}</strong>
               </div>
             ) : null}
             <dl>
-              <div><dt>From price</dt><dd>{formatTripMoney(trip.price)}</dd></div>
-              <div><dt>Deposit option</dt><dd>{formatTripMoney(trip.deposit)}</dd></div>
+              <div><dt>From price</dt><dd>{formatTripMoney(pricing.price)}</dd></div>
+              <div><dt>Deposit option</dt><dd>{formatTripMoney(pricing.deposit)}</dd></div>
               <div><dt>Seats remaining</dt><dd>{trip.seatsRemaining}</dd></div>
             </dl>
             <label>

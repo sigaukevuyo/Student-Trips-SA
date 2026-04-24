@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { dbTripToTrip, tripSelect, type DbCity, type DbTrip } from "../../lib/db";
+import { dbTripToTrip, getTodayIsoDate, tripSelect, type DbCity, type DbTrip } from "../../lib/db";
 import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
@@ -42,7 +42,7 @@ export function TripsScreen({
 
       const [cityResult, tripResult] = await Promise.all([
         supabase.from("cities").select("id,slug,name,province,image_url,tagline,support_email,support_phone").eq("active", true).order("name"),
-        supabase.from("trips").select(tripSelect).eq("published", true).order("start_date"),
+        supabase.from("trips").select(tripSelect).eq("published", true).gte("start_date", getTodayIsoDate()).order("start_date"),
       ]);
 
       if (!mounted) return;

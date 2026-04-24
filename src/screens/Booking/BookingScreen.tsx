@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useCurrency } from "../../lib/currency";
 import { formatDate } from "../../lib/data";
 import { friendlyError } from "../../lib/friendlyError";
+import { usePricing } from "../../lib/pricing";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
 import type { View } from "../../shared/navigation";
@@ -26,6 +27,7 @@ type PaymentMethod = "proof";
 
 export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (view: View) => void }) {
   const { formatTripMoney, priceNotice } = useCurrency();
+  const { refreshPricingTier, resolveTripPricing } = usePricing();
   const [activeStep, setActiveStep] = useState(0);
   const [travelers, setTravelers] = useState(1);
   const [companionNames, setCompanionNames] = useState<string[]>([]);
@@ -47,7 +49,8 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
 
   const selectedPickupPoint = pickupPoint || pickupPoints[0] || "";
   const travelerLimit = Math.max(1, Math.min(trip?.seatsRemaining ?? 1, maxTravelersPerBooking));
-  const amountPerTraveler = paymentOption === "deposit" ? trip?.deposit ?? 0 : trip?.price ?? 0;
+  const pricing = useMemo(() => (trip ? resolveTripPricing(trip) : { price: 0, comparePrice: null, deposit: 0, tier: "guest" as const }), [resolveTripPricing, trip]);
+  const amountPerTraveler = paymentOption === "deposit" ? pricing.deposit : pricing.price;
   const dueNow = amountPerTraveler * travelers;
   const companionCount = Math.max(travelers - 1, 0);
 
@@ -111,8 +114,8 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
         traveler_last_name: profile?.last_name ?? user.user_metadata?.last_name ?? null,
         traveler_email: profile?.email ?? user.email ?? null,
         traveler_phone: profile?.phone ?? user.user_metadata?.phone ?? null,
-        total_cents: trip.price * travelers,
-        deposit_cents: trip.deposit * travelers,
+        total_cents: pricing.price * travelers,
+        deposit_cents: pricing.deposit * travelers,
         paid_cents: 0,
         notes: JSON.stringify(notes),
       })
@@ -173,6 +176,7 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
 
     setSubmitting(false);
     setBookingMessage("Proof submitted. Your booking is awaiting review.");
+    await refreshPricingTier();
     setView("customer");
   };
 
@@ -381,10 +385,10 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
             <strong>{trip.city}</strong>
             <span>{trip.category}</span>
           </section>
-          {trip.originalPrice && trip.originalPrice > trip.price ? (
+          {pricing.comparePrice ? (
             <section className="booking-summary-sale">
-              <span>Was {formatTripMoney(trip.originalPrice)}</span>
-              <strong>Now {formatTripMoney(trip.price)}</strong>
+              <span>Was {formatTripMoney(pricing.comparePrice)}</span>
+              <strong>Now {formatTripMoney(pricing.price)}</strong>
             </section>
           ) : null}
           <div className="booking-summary-meta">
@@ -393,8 +397,8 @@ export function BookingScreen({ trip, setView }: { trip: Trip | null; setView: (
             <span><Clock size={17} /> Pickup: {selectedPickupPoint}</span>
           </div>
           <dl className="booking-summary-totals">
-            <div><dt>Price per traveler</dt><dd>{formatTripMoney(trip.price)}</dd></div>
-            <div><dt>Deposit per traveler</dt><dd>{formatTripMoney(trip.deposit)}</dd></div>
+            <div><dt>Price per traveler</dt><dd>{formatTripMoney(pricing.price)}</dd></div>
+            <div><dt>Deposit per traveler</dt><dd>{formatTripMoney(pricing.deposit)}</dd></div>
             <div className="due"><dt>Due now</dt><dd>{formatTripMoney(dueNow)}</dd></div>
           </dl>
           <p><CheckCircle2 size={15} /> {priceNotice}</p>

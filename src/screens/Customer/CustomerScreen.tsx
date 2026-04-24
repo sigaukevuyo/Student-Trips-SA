@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useCurrency } from "../../lib/currency";
 import { formatDate } from "../../lib/data";
-import { dbTripToTrip, tripSelect, type DbTrip } from "../../lib/db";
+import { dbTripToTrip, getTodayIsoDate, tripSelect, type DbTrip } from "../../lib/db";
 import { friendlyError } from "../../lib/friendlyError";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
@@ -181,7 +181,7 @@ export function CustomerScreen({
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(4),
-        supabase.from("trips").select(tripSelect).eq("published", true).order("start_date").limit(4),
+        supabase.from("trips").select(tripSelect).eq("published", true).gte("start_date", getTodayIsoDate()).order("start_date").limit(4),
         supabase.from("reviews").select("id,trip_id,author_name,rating,quote,published,created_at,trips(title)").eq("user_id", user.id).order("created_at", { ascending: false }),
       ]);
 

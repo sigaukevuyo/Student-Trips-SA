@@ -10,6 +10,8 @@ export type Trip = {
   startDate: string;
   duration: string;
   price: number;
+  communityPrice: number | null;
+  nonCommunityPrice: number | null;
   originalPrice: number | null;
   deposit: number;
   seatsRemaining: number;

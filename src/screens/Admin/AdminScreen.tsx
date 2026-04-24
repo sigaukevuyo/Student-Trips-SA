@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "../../lib/data";
 import { deriveTripStatus } from "../../lib/db";
 import { friendlyError } from "../../lib/friendlyError";
+import { logActivity } from "../../lib/activityLog";
 import { supabase } from "../../lib/supabase";
 import { Button } from "../../shared/components/Button";
 import { StatCard } from "../../shared/components/StatCard";
@@ -12,7 +13,7 @@ import { ThemeLoader } from "../../shared/components/ThemeLoader";
 import { RoleShell } from "../../shared/layout/RoleShell";
 import "./AdminScreen.css";
 
-const adminTabs = ["Overview", "Branch Manager", "Bookings", "Users", "Cities", "Trips", "Payments", "Inquiries", "Updates", "Reviews"];
+const adminTabs = ["Overview", "Branch Manager", "Bookings", "Users", "Cities", "Trips", "Payments", "Inquiries", "Updates", "Reviews", "Logs"];
 const adminAssetBucket = "student-trip-assets";
 const adminTabStorageKey = "student-trips:admin-tab";
 const activeBookingStatuses = new Set(["Pending Payment", "Awaiting Proof", "Waitlisted", "Confirmed"]);
@@ -67,6 +68,8 @@ type AdminTrip = {
   start_date: string;
   duration: string | null;
   price_cents: number;
+  community_price_cents: number | null;
+  non_community_price_cents: number | null;
   original_price_cents: number | null;
   deposit_cents: number;
   capacity: number;
@@ -148,6 +151,23 @@ type AdminReview = {
   trips: { title: string | null } | null;
 };
 
+type AdminActivityLog = {
+  id: string;
+  actor_id: string | null;
+  actor_role: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  entity_label: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
+  profiles: {
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  } | null;
+};
+
 type PendingDelete = {
   table: string;
   id: string;
@@ -176,6 +196,20 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function renderTripPriceSummary(trip: AdminTrip) {
+  const communityPrice = trip.community_price_cents ?? trip.price_cents;
+  const nonCommunityPrice = trip.non_community_price_cents ?? trip.original_price_cents ?? trip.price_cents;
+  const comparePrice = trip.original_price_cents;
+
+  return (
+    <div className="admin-trip-price-stack">
+      <strong>{`Community ${formatMoney(communityPrice)}`}</strong>
+      <span>{`Non-community ${formatMoney(nonCommunityPrice)}`}</span>
+      {comparePrice && comparePrice > nonCommunityPrice ? <span>{`Compare-at ${formatMoney(comparePrice)}`}</span> : null}
+    </div>
+  );
+}
+
 export function AdminScreen() {
   const [activeTab, setActiveTabState] = useState(getSavedAdminTab);
   const [currentProfile, setCurrentProfile] = useState<AdminProfile | null>(null);
@@ -188,6 +222,7 @@ export function AdminScreen() {
   const [partnerInquiries, setPartnerInquiries] = useState<PartnerInquiry[]>([]);
   const [updates, setUpdates] = useState<AdminUpdate[]>([]);
   const [reviews, setReviews] = useState<AdminReview[]>([]);
+  const [activityLogs, setActivityLogs] = useState<AdminActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
   const [editingKey, setEditingKey] = useState("");
@@ -223,8 +258,9 @@ export function AdminScreen() {
     pickup_points: [""],
     start_date: "",
     duration: "",
-    price: "",
-    original_price: "",
+    community_price: "",
+    non_community_price: "",
+    compare_price: "",
     deposit: "",
     capacity: "",
     seats_remaining: "",
@@ -297,17 +333,23 @@ export function AdminScreen() {
       partnerResult,
       updateResult,
       reviewResult,
+      activityLogResult,
     ] = await Promise.all([
       userId ? supabase.from("profiles").select("id,role,branch_city_id,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at,cities(name)").eq("id", userId).maybeSingle() : Promise.resolve({ data: null, error: null }),
       supabase.from("profiles").select("id,role,branch_city_id,first_name,last_name,email,phone,campus,organisation,profile_complete_percent,created_at,cities(name)").order("created_at", { ascending: false }).limit(100),
       supabase.from("cities").select("id,slug,name,province,active,support_email,support_phone,image_url,tagline,trips(count)").order("name"),
-      supabase.from("trips").select("id,slug,title,category,image_url,summary,meeting_point,pickup_points,start_date,duration,price_cents,original_price_cents,deposit_cents,capacity,seats_remaining,status,is_special,special_collection_slug,published,created_at,cities(id,name)").order("created_at", { ascending: false }).limit(100),
+      supabase.from("trips").select("id,slug,title,category,image_url,summary,meeting_point,pickup_points,start_date,duration,price_cents,community_price_cents,non_community_price_cents,original_price_cents,deposit_cents,capacity,seats_remaining,status,is_special,special_collection_slug,published,created_at,cities(id,name)").order("created_at", { ascending: false }).limit(100),
       supabase.from("bookings").select("id,user_id,booking_ref,status,total_cents,paid_cents,outstanding_cents,created_at,trips(title,cities(name))").order("created_at", { ascending: false }).limit(100),
       supabase.from("payments").select("id,amount_cents,method,status,provider,provider_reference,paid_at,created_at,bookings(booking_ref,status,trips(title))").order("created_at", { ascending: false }).limit(100),
       supabase.from("payment_proofs").select("id,booking_id,file_path,file_name,amount_cents,approved,created_at,bookings(booking_ref)").order("created_at", { ascending: false }).limit(100),
       supabase.from("partner_inquiries").select("id,inquiry_type,name,email,phone,organisation,campus,preferred_city,details,created_at").order("created_at", { ascending: false }).limit(100),
       supabase.from("updates").select("id,title,body,banner_special_collection_slug,published_on,published,created_at").order("published_on", { ascending: false }).limit(100),
       supabase.from("reviews").select("id,trip_id,author_name,rating,quote,published,created_at,trips(title)").order("created_at", { ascending: false }).limit(100),
+      supabase
+        .from("activity_logs")
+        .select("id,actor_id,actor_role,action,entity_type,entity_id,entity_label,details,created_at,profiles(first_name,last_name,email)")
+        .order("created_at", { ascending: false })
+        .limit(150),
     ]);
 
     const firstError =
@@ -336,6 +378,7 @@ export function AdminScreen() {
     setPartnerInquiries((partnerResult.data as PartnerInquiry[] | null) ?? []);
     setUpdates((updateResult.data as AdminUpdate[] | null) ?? []);
     setReviews((reviewResult.data as unknown as AdminReview[] | null) ?? []);
+    setActivityLogs((activityLogResult.data as unknown as AdminActivityLog[] | null) ?? []);
     setLoading(false);
   }
 
@@ -343,13 +386,32 @@ export function AdminScreen() {
     loadAdmin();
   }, []);
 
-  async function updateRecord(table: string, id: string, values: Record<string, unknown>) {
+  async function updateRecord(
+    table: string,
+    id: string,
+    values: Record<string, unknown>,
+    activity?: {
+      action: string;
+      entityType: string;
+      entityLabel?: string | null;
+      details?: Record<string, unknown>;
+    },
+  ) {
     if (!supabase) return;
     setSaving(`${table}-${id}`);
     const { error: updateError } = await supabase.from(table).update(values).eq("id", id);
     if (updateError) {
       setError(friendlyError(updateError, "Could not save changes. Please try again."));
     } else {
+      if (activity) {
+        await logActivity({
+          action: activity.action,
+          entityType: activity.entityType,
+          entityId: id,
+          entityLabel: activity.entityLabel ?? id,
+          details: activity.details ?? values,
+        });
+      }
       await loadAdmin();
       setSuccessMessage("Changes saved successfully.");
     }
@@ -369,6 +431,13 @@ export function AdminScreen() {
     if (deleteError) {
       setError(friendlyError(deleteError, "Could not delete this record. Please try again."));
     } else {
+      await logActivity({
+        action: `${pendingDelete.table}_deleted`,
+        entityType: pendingDelete.table,
+        entityId: pendingDelete.id,
+        entityLabel: pendingDelete.label,
+        details: { label: pendingDelete.label },
+      });
       if (editingKey.endsWith(pendingDelete.id)) {
         setEditingKey("");
         setEditingValues({});
@@ -387,6 +456,13 @@ export function AdminScreen() {
     if (updateError) {
       setError(friendlyError(updateError, "Could not update this role. Please try again."));
     } else {
+      await logActivity({
+        action: "profile_role_updated",
+        entityType: "profile",
+        entityId: id,
+        entityLabel: profilesById[id] ? personName(profilesById[id]) : id,
+        details: { role },
+      });
       await loadAdmin();
       setSuccessMessage("Role updated successfully.");
     }
@@ -446,8 +522,9 @@ export function AdminScreen() {
       pickup_points: [""],
       start_date: "",
       duration: "",
-      price: "",
-      original_price: "",
+      community_price: "",
+      non_community_price: "",
+      compare_price: "",
       deposit: "",
       capacity: "",
       seats_remaining: "",
@@ -594,8 +671,9 @@ export function AdminScreen() {
         pickup_points: trip.pickup_points?.length ? trip.pickup_points : [trip.meeting_point ?? ""],
         start_date: trip.start_date,
         duration: trip.duration ?? "",
-        price: String(trip.price_cents / 100),
-        original_price: trip.original_price_cents ? String(trip.original_price_cents / 100) : "",
+        community_price: String((trip.community_price_cents ?? trip.price_cents) / 100),
+        non_community_price: String((trip.non_community_price_cents ?? trip.original_price_cents ?? trip.price_cents) / 100),
+        compare_price: trip.original_price_cents ? String(trip.original_price_cents / 100) : "",
         deposit: String(trip.deposit_cents / 100),
         capacity: String(trip.capacity),
         seats_remaining: String(trip.seats_remaining),
@@ -705,6 +783,13 @@ export function AdminScreen() {
     if (insertError) {
       setError(friendlyError(insertError, "Could not save this city. Please check the details and try again."));
     } else {
+      await logActivity({
+        action: wasEditing ? "city_updated" : "city_created",
+        entityType: "city",
+        entityId: editingCityId || null,
+        entityLabel: name,
+        details: cityValues,
+      });
       setShowCityModal(false);
       resetCityForm();
       await loadAdmin();
@@ -719,8 +804,9 @@ export function AdminScreen() {
     const wasEditing = Boolean(editingTripId);
     const title = tripForm.title.trim();
     const slug = (tripForm.slug.trim() || slugify(title)).trim();
-    const priceCents = Math.round(Number(tripForm.price) * 100);
-    const originalPriceCents = tripForm.original_price ? Math.round(Number(tripForm.original_price) * 100) : null;
+    const communityPriceCents = Math.round(Number(tripForm.community_price) * 100);
+    const nonCommunityPriceCents = Math.round(Number(tripForm.non_community_price) * 100);
+    const comparePriceCents = tripForm.compare_price ? Math.round(Number(tripForm.compare_price) * 100) : null;
     const depositCents = Math.round(Number(tripForm.deposit || "0") * 100);
     const capacity = Number.parseInt(tripForm.capacity, 10);
     const seatsRemaining = Number.parseInt(tripForm.seats_remaining || tripForm.capacity, 10);
@@ -732,13 +818,18 @@ export function AdminScreen() {
       return;
     }
 
-    if (!Number.isFinite(priceCents) || priceCents < 0 || !Number.isFinite(capacity) || capacity <= 0 || !Number.isFinite(seatsRemaining) || seatsRemaining < 0) {
-      setError("Trip price, capacity, and seats must be valid numbers.");
+    if (!Number.isFinite(communityPriceCents) || communityPriceCents < 0 || !Number.isFinite(nonCommunityPriceCents) || nonCommunityPriceCents < 0 || !Number.isFinite(capacity) || capacity <= 0 || !Number.isFinite(seatsRemaining) || seatsRemaining < 0) {
+      setError("Community price, non-community price, capacity, and seats must be valid numbers.");
       return;
     }
 
-    if (originalPriceCents !== null && (!Number.isFinite(originalPriceCents) || originalPriceCents < priceCents)) {
-      setError("Original price must be greater than or equal to the current price.");
+    if (nonCommunityPriceCents < communityPriceCents) {
+      setError("Non-community price must be greater than or equal to community price.");
+      return;
+    }
+
+    if (comparePriceCents !== null && (!Number.isFinite(comparePriceCents) || comparePriceCents < Math.max(communityPriceCents, nonCommunityPriceCents))) {
+      setError("Compare-at price must be greater than or equal to both live prices.");
       return;
     }
 
@@ -760,8 +851,10 @@ export function AdminScreen() {
       pickup_points: pickupPoints,
       start_date: tripForm.start_date,
       duration: tripForm.duration.trim() || null,
-      price_cents: priceCents,
-      original_price_cents: originalPriceCents,
+      price_cents: communityPriceCents,
+      community_price_cents: communityPriceCents,
+      non_community_price_cents: nonCommunityPriceCents,
+      original_price_cents: comparePriceCents,
       deposit_cents: depositCents,
       capacity,
       seats_remaining: Math.min(seatsRemaining, capacity),
@@ -787,6 +880,13 @@ export function AdminScreen() {
         if (legacyError) {
           setError(friendlyError(legacyError, "Could not save this trip. Please check the details and try again."));
         } else {
+          await logActivity({
+            action: wasEditing ? "trip_updated" : "trip_created",
+            entityType: "trip",
+            entityId: editingTripId || null,
+            entityLabel: title,
+            details: legacyTripValues,
+          });
           setShowTripModal(false);
           resetTripForm();
           await loadAdmin();
@@ -796,6 +896,13 @@ export function AdminScreen() {
         setError(friendlyError(insertError, "Could not save this trip. Please check the details and try again."));
       }
     } else {
+      await logActivity({
+        action: wasEditing ? "trip_updated" : "trip_created",
+        entityType: "trip",
+        entityId: editingTripId || null,
+        entityLabel: title,
+        details: tripValues,
+      });
       setShowTripModal(false);
       resetTripForm();
       await loadAdmin();
@@ -838,6 +945,13 @@ export function AdminScreen() {
     if (insertError) {
       setError(friendlyError(insertError, "Could not save this review. Please check the details and try again."));
     } else {
+      await logActivity({
+        action: wasEditing ? "review_updated" : "review_created",
+        entityType: "review",
+        entityId: editingReviewId || null,
+        entityLabel: authorName,
+        details: reviewValues,
+      });
       setShowReviewModal(false);
       resetReviewForm();
       await loadAdmin();
@@ -874,6 +988,13 @@ export function AdminScreen() {
     if (insertError) {
       setError(friendlyError(insertError, "Could not save this update. Please check the details and try again."));
     } else {
+      await logActivity({
+        action: wasEditing ? "update_updated" : "update_created",
+        entityType: "update",
+        entityId: editingUpdateId || null,
+        entityLabel: title,
+        details: updateValues,
+      });
       setShowUpdateModal(false);
       resetUpdateForm();
       await loadAdmin();
@@ -929,6 +1050,12 @@ export function AdminScreen() {
     }
 
     if (!profile) {
+      await logActivity({
+        action: isEditing ? "branch_manager_assignment_updated" : "branch_manager_assignment_created",
+        entityType: "branch_manager_assignment",
+        entityLabel: email,
+        details: assignmentValues,
+      });
       setShowBranchManagerModal(false);
       resetBranchManagerForm();
       setSuccessMessage("Branch manager assignment saved. When this email signs up, their role will become branch automatically.");
@@ -947,6 +1074,13 @@ export function AdminScreen() {
     if (updateError) {
       setError(friendlyError(updateError, "Could not update this branch manager. Please try again."));
     } else {
+      await logActivity({
+        action: isEditing ? "branch_manager_updated" : "branch_manager_created",
+        entityType: "profile",
+        entityId: profile.id,
+        entityLabel: email,
+        details: values,
+      });
       setShowBranchManagerModal(false);
       resetBranchManagerForm();
       await loadAdmin();
@@ -961,6 +1095,10 @@ export function AdminScreen() {
       category: String(editingValues.category ?? "").trim(),
       start_date: String(editingValues.start_date ?? ""),
       published: Boolean(editingValues.published),
+    }, {
+      action: "trip_quick_updated",
+      entityType: "trip",
+      entityLabel: String(editingValues.title ?? id).trim() || id,
     });
     cancelEdit();
   }
@@ -968,6 +1106,10 @@ export function AdminScreen() {
   async function saveBooking(id: string) {
     await updateRecord("bookings", id, {
       status: String(editingValues.status ?? "Pending Payment"),
+    }, {
+      action: "booking_updated",
+      entityType: "booking",
+      entityLabel: String(editingValues.booking_ref ?? id).trim() || id,
     });
     cancelEdit();
   }
@@ -1005,6 +1147,18 @@ export function AdminScreen() {
       if (bookingError) {
         setError(friendlyError(bookingError, "Could not update this booking. Please try again."));
       } else {
+        await logActivity({
+          action: "payment_proof_rejected",
+          entityType: "payment_proof",
+          entityId: proof.id,
+          entityLabel: proof.bookings?.booking_ref ?? proof.file_name ?? proof.id,
+          details: {
+            booking_id: proof.booking_id,
+            booking_ref: proof.bookings?.booking_ref ?? null,
+            approved,
+            amount_cents: proof.amount_cents,
+          },
+        });
         await loadAdmin();
         setSuccessMessage("Payment proof rejected.");
       }
@@ -1049,6 +1203,20 @@ export function AdminScreen() {
     if (bookingError) {
       setError(friendlyError(bookingError, "Could not update this booking. Please try again."));
     } else {
+      await logActivity({
+        action: "payment_proof_approved",
+        entityType: "payment_proof",
+        entityId: proof.id,
+        entityLabel: proof.bookings?.booking_ref ?? proof.file_name ?? proof.id,
+        details: {
+          booking_id: proof.booking_id,
+          booking_ref: proof.bookings?.booking_ref ?? null,
+          approved,
+          amount_cents: proof.amount_cents,
+          next_paid_cents: nextPaid,
+          booking_status: nextStatus,
+        },
+      });
       await loadAdmin();
       setSuccessMessage("Payment proof approved and booking updated.");
     }
@@ -1084,6 +1252,10 @@ export function AdminScreen() {
       campus: profileForm.campus.trim() || null,
       organisation: profileForm.organisation.trim() || null,
       role: profileForm.role,
+    }, {
+      action: "profile_updated",
+      entityType: "profile",
+      entityLabel: `${profileForm.first_name} ${profileForm.last_name}`.trim() || editingProfileId,
     });
 
     setShowProfileModal(false);
@@ -1097,6 +1269,10 @@ export function AdminScreen() {
       support_email: String(editingValues.support_email ?? "").trim() || null,
       support_phone: String(editingValues.support_phone ?? "").trim() || null,
       active: Boolean(editingValues.active),
+    }, {
+      action: "city_quick_updated",
+      entityType: "city",
+      entityLabel: String(editingValues.name ?? id).trim() || id,
     });
     cancelEdit();
   }
@@ -1108,6 +1284,10 @@ export function AdminScreen() {
       quote: String(editingValues.quote ?? "").trim(),
       trip_id: String(editingValues.trip_id ?? "") || null,
       published: Boolean(editingValues.published),
+    }, {
+      action: "review_updated",
+      entityType: "review",
+      entityLabel: String(editingValues.author_name ?? id).trim() || id,
     });
     cancelEdit();
   }
@@ -1244,7 +1424,7 @@ export function AdminScreen() {
                     <input type="date" value={String(editingValues.start_date ?? "")} onChange={(event) => setEditingValue("start_date", event.target.value)} />
                     <span>{trip.cities?.name ?? "No city"} - {trip.seats_remaining}/{trip.capacity} seats</span>
                   </div>
-                  <strong>{trip.original_price_cents && trip.original_price_cents > trip.price_cents ? `${formatMoney(trip.original_price_cents)} -> ${formatMoney(trip.price_cents)}` : formatMoney(trip.price_cents)}</strong>
+                  {renderTripPriceSummary(trip)}
                   <div className="admin-edit-stack">
                     <StatusBadge status={deriveTripStatus(trip.capacity, trip.seats_remaining)} />
                     <label className="admin-check"><input type="checkbox" checked={Boolean(editingValues.published)} onChange={(event) => setEditingValue("published", event.target.checked)} /> Published</label>
@@ -1259,7 +1439,7 @@ export function AdminScreen() {
                 <article key={trip.id} className="admin-table-row admin-table-row-trip">
                   <div><strong>{trip.title}</strong><span>{trip.cities?.name ?? "No city"} - {trip.category}{trip.is_special ? ` - ${trip.special_collection_slug ?? "special"}` : ""}</span></div>
                   <div><strong>{formatDate(trip.start_date)}</strong><span>{trip.seats_remaining}/{trip.capacity} seats</span></div>
-                  <strong>{trip.original_price_cents && trip.original_price_cents > trip.price_cents ? `${formatMoney(trip.original_price_cents)} -> ${formatMoney(trip.price_cents)}` : formatMoney(trip.price_cents)}</strong>
+                  {renderTripPriceSummary(trip)}
                   <StatusBadge status={trip.published ? deriveTripStatus(trip.capacity, trip.seats_remaining) : "Draft"} />
                   <div className="admin-actions">
                     <Button variant="secondary" onClick={() => openTripForm(trip)}>Edit</Button>
@@ -1377,9 +1557,9 @@ export function AdminScreen() {
                     <StatusBadge status={payment.status} />
                   </div>
                   <div className="admin-payment-actions">
-                    <Button variant="secondary" onClick={() => updateRecord("payments", payment.id, { status: "Paid", paid_at: new Date().toISOString() })}>Paid</Button>
-                    <Button variant="ghost" onClick={() => updateRecord("payments", payment.id, { status: "Failed" })}>Failed</Button>
-                    <Button variant="ghost" onClick={() => updateRecord("payments", payment.id, { status: "Refunded" })}>Refunded</Button>
+                    <Button variant="secondary" onClick={() => updateRecord("payments", payment.id, { status: "Paid", paid_at: new Date().toISOString() }, { action: "payment_status_updated", entityType: "payment", entityLabel: payment.bookings?.booking_ref ?? payment.id, details: { status: "Paid" } })}>Paid</Button>
+                    <Button variant="ghost" onClick={() => updateRecord("payments", payment.id, { status: "Failed" }, { action: "payment_status_updated", entityType: "payment", entityLabel: payment.bookings?.booking_ref ?? payment.id, details: { status: "Failed" } })}>Failed</Button>
+                    <Button variant="ghost" onClick={() => updateRecord("payments", payment.id, { status: "Refunded" }, { action: "payment_status_updated", entityType: "payment", entityLabel: payment.bookings?.booking_ref ?? payment.id, details: { status: "Refunded" } })}>Refunded</Button>
                   </div>
                 </article>
               ))}
@@ -1650,6 +1830,10 @@ export function AdminScreen() {
             </div>
 
             <div className="admin-modal-grid">
+              <div className="admin-pricing-note admin-modal-full">
+                <strong>Pricing setup</strong>
+                <p>Community price is for returning travelers with 1 or more previous bookings. Non-community price is for first-time or guest bookings. Compare-at / original price is optional and only used when you want a crossed-out promo price above the live selling prices.</p>
+              </div>
               <label>
                 Trip title
                 <input value={tripForm.title} onChange={(event) => setTripFormValue("title", event.target.value)} placeholder="Cape Town Coastal Weekender" />
@@ -1680,12 +1864,19 @@ export function AdminScreen() {
                 <input value={tripForm.duration} onChange={(event) => setTripFormValue("duration", event.target.value)} placeholder="3 days" />
               </label>
               <label>
-                Price
-                <input type="number" min="0" step="0.01" value={tripForm.price} onChange={(event) => setTripFormValue("price", event.target.value)} placeholder="3499" />
+                Community price
+                <input type="number" min="0" step="0.01" value={tripForm.community_price} onChange={(event) => setTripFormValue("community_price", event.target.value)} placeholder="3499" />
+                <span className="admin-field-note">Used for returning travelers.</span>
               </label>
               <label>
-                Original price
-                <input type="number" min="0" step="0.01" value={tripForm.original_price} onChange={(event) => setTripFormValue("original_price", event.target.value)} placeholder="3999" />
+                Non-community price
+                <input type="number" min="0" step="0.01" value={tripForm.non_community_price} onChange={(event) => setTripFormValue("non_community_price", event.target.value)} placeholder="3999" />
+                <span className="admin-field-note">Shown to guests and first-time bookers.</span>
+              </label>
+              <label>
+                Compare-at / original price
+                <input type="number" min="0" step="0.01" value={tripForm.compare_price} onChange={(event) => setTripFormValue("compare_price", event.target.value)} placeholder="4299" />
+                <span className="admin-field-note">Optional crossed-out promo price.</span>
               </label>
               <label>
                 Deposit
@@ -1828,13 +2019,50 @@ export function AdminScreen() {
                   <strong>{review.trips?.title ?? "General review"}</strong>
                   <StatusBadge status={review.published ? "Published" : "Pending"} />
                   <div className="admin-actions">
-                    {!review.published ? <Button variant="secondary" onClick={() => updateRecord("reviews", review.id, { published: true })}>Approve</Button> : null}
-                    {review.published ? <Button variant="ghost" onClick={() => updateRecord("reviews", review.id, { published: false })}>Hide</Button> : null}
+                    {!review.published ? <Button variant="secondary" onClick={() => updateRecord("reviews", review.id, { published: true }, { action: "review_published", entityType: "review", entityLabel: review.author_name, details: { published: true } })}>Approve</Button> : null}
+                    {review.published ? <Button variant="ghost" onClick={() => updateRecord("reviews", review.id, { published: false }, { action: "review_hidden", entityType: "review", entityLabel: review.author_name, details: { published: false } })}>Hide</Button> : null}
                     <Button variant="secondary" onClick={() => openReviewForm(review)}>Edit</Button>
                     <Button variant="ghost" onClick={() => deleteRecord("reviews", review.id, review.author_name)}>Delete</Button>
                   </div>
                 </article>
               )
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!loading && !error && activeTab === "Logs" ? (
+        <section className="card">
+          <div className="card-head">
+            <h3>Activity Logs</h3>
+          </div>
+          <div className="admin-data-table admin-data-table-logs">
+            <div className="admin-table-head admin-table-row-log">
+              <span>When</span>
+              <span>Actor</span>
+              <span>Action</span>
+              <span>Record</span>
+            </div>
+            {activityLogs.length === 0 ? <EmptyState title="No activity logs yet" detail="Admin and branch actions will appear here once changes are made." /> : null}
+            {activityLogs.map((log) => (
+              <article key={log.id} className="admin-table-row admin-table-row-log">
+                <div>
+                  <strong>{formatDate(log.created_at)}</strong>
+                  <span>{new Date(log.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+                <div>
+                  <strong>{[log.profiles?.first_name, log.profiles?.last_name].filter(Boolean).join(" ").trim() || log.profiles?.email || "Staff user"}</strong>
+                  <span>{log.actor_role ?? "staff"}</span>
+                </div>
+                <div>
+                  <strong>{log.action.replace(/_/g, " ")}</strong>
+                  <span>{log.entity_type.replace(/_/g, " ")}</span>
+                </div>
+                <div>
+                  <strong>{log.entity_label ?? log.entity_id ?? "Record"}</strong>
+                  <span>{log.details && Object.keys(log.details).length > 0 ? JSON.stringify(log.details) : "No extra details"}</span>
+                </div>
+              </article>
             ))}
           </div>
         </section>

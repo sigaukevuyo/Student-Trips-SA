@@ -156,6 +156,20 @@
   font-size: 13px;
 }
 
+.admin-trip-price-stack {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-trip-price-stack strong {
+  color: var(--primary);
+}
+
+.admin-trip-price-stack span {
+  color: var(--muted-ink);
+  font-size: 12px;
+}
+
 .admin-table-row a {
   font-weight: 900;
   text-decoration: none;
@@ -187,6 +201,10 @@
 
 .admin-table-row-review {
   grid-template-columns: minmax(150px, 0.8fr) minmax(260px, 1.6fr) minmax(160px, 0.9fr) minmax(120px, 0.7fr) minmax(150px, auto);
+}
+
+.admin-table-row-log {
+  grid-template-columns: minmax(120px, 0.7fr) minmax(170px, 1fr) minmax(170px, 0.9fr) minmax(260px, 1.6fr);
 }
 
 .admin-edit-stack {
@@ -623,6 +641,34 @@
   resize: vertical;
 }
 
+.admin-pricing-note {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dce6ef;
+  border-radius: 10px;
+  background: #f7fafc;
+  padding: 14px;
+}
+
+.admin-pricing-note strong {
+  color: var(--primary);
+  font-size: 14px;
+}
+
+.admin-pricing-note p {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.admin-field-note {
+  color: var(--muted-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .admin-upload-field {
   min-width: 0;
 }
@@ -735,7 +781,8 @@
   .admin-table-row-branch-manager,
   .admin-table-row-city,
   .admin-table-row-update,
-  .admin-table-row-review {
+  .admin-table-row-review,
+  .admin-table-row-log {
     grid-template-columns: 1fr;
   }
 

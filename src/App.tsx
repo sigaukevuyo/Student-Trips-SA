@@ -18,7 +18,8 @@ import { TripDetailScreen } from "./screens/Trips/TripDetailScreen";
 import { TripsScreen } from "./screens/Trips/TripsScreen";
 import { UpdatesScreen } from "./screens/Updates/UpdatesScreen";
 import { CurrencyProvider } from "./lib/currency";
-import { dbTripToTrip, tripSelect, type DbTrip } from "./lib/db";
+import { dbTripToTrip, getTodayIsoDate, tripSelect, type DbTrip } from "./lib/db";
+import { PricingProvider } from "./lib/pricing";
 import { supabase } from "./lib/supabase";
 import type { Trip } from "./lib/types";
 import { CookieBanner } from "./shared/components/CookieBanner";
@@ -320,7 +321,7 @@ export function App() {
         return;
       }
 
-      const { data } = await supabase.from("trips").select(tripSelect).eq("published", true).eq("slug", routeTripSlug).maybeSingle();
+      const { data } = await supabase.from("trips").select(tripSelect).eq("published", true).gte("start_date", getTodayIsoDate()).eq("slug", routeTripSlug).maybeSingle();
       if (!active) return;
 
       if (data) {
@@ -500,32 +501,34 @@ export function App() {
 
   return (
     <CurrencyProvider>
-      <AppHeader activeView={view} isLoggedIn={isLoggedIn} onDashboardClick={handleDashboardClick} onSignOut={handleSignOut} setView={setView} />
-      {view === "home" ? <HomeScreen onTripSearch={setTripFilters} onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
-      {view === "trips" ? <TripsScreen initialFilters={tripFilters} onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
-      {view === "tripDetail" ? <TripDetailScreen trip={selectedTrip} isLoggedIn={isLoggedIn} setView={setView} /> : null}
-      {view === "booking" ? <BookingScreen trip={selectedTrip} setView={setView} /> : null}
-      {view === "cities" ? <CitiesScreen setView={setView} setSelectedCity={setSelectedCity} /> : null}
-      {view === "cityDetail" ? <CityDetailScreen city={selectedCity} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
-      {view === "faq" ? <FaqScreen /> : null}
-      {view === "updates" ? <UpdatesScreen /> : null}
-      {view === "partner" ? <PartnerScreen /> : null}
-      {view === "contact" ? <ContactScreen /> : null}
-      {view === "login" ? <AuthScreen mode="login" onLoggedIn={handleLoggedIn} setView={setView} /> : null}
-      {view === "register" ? <AuthScreen mode="register" onLoggedIn={handleLoggedIn} setView={setView} /> : null}
-      {view === "onboarding" ? <OnboardingScreen setView={setView} /> : null}
-      {view === "resetPassword" ? <AuthScreen mode="resetPassword" onLoggedIn={handleLoggedIn} setView={setView} /> : null}
-      {view === "updatePassword" ? <AuthScreen mode="updatePassword" onLoggedIn={handleLoggedIn} setView={setView} /> : null}
-      {view === "terms" ? <PolicyScreen policy="terms" /> : null}
-      {view === "privacy" ? <PolicyScreen policy="privacy" /> : null}
-      {view === "refund" ? <PolicyScreen policy="refund" /> : null}
-      {view === "accessibility" ? <PolicyScreen policy="accessibility" /> : null}
-      {view === "waiver" ? <PolicyScreen policy="waiver" /> : null}
-      {view === "customer" ? <CustomerScreen onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
-      {view === "admin" ? <AdminScreen /> : null}
-      {view === "branch" ? <BranchScreen /> : null}
-      <SiteFooter activeView={view} onCityClick={handleOpenCityByName} setView={setView} />
-      <CookieBanner onPrivacyClick={() => setView("privacy")} />
+      <PricingProvider>
+        <AppHeader activeView={view} isLoggedIn={isLoggedIn} onDashboardClick={handleDashboardClick} onSignOut={handleSignOut} setView={setView} />
+        {view === "home" ? <HomeScreen onTripSearch={setTripFilters} onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
+        {view === "trips" ? <TripsScreen initialFilters={tripFilters} onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
+        {view === "tripDetail" ? <TripDetailScreen trip={selectedTrip} isLoggedIn={isLoggedIn} setView={setView} /> : null}
+        {view === "booking" ? <BookingScreen trip={selectedTrip} setView={setView} /> : null}
+        {view === "cities" ? <CitiesScreen setView={setView} setSelectedCity={setSelectedCity} /> : null}
+        {view === "cityDetail" ? <CityDetailScreen city={selectedCity} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
+        {view === "faq" ? <FaqScreen /> : null}
+        {view === "updates" ? <UpdatesScreen /> : null}
+        {view === "partner" ? <PartnerScreen /> : null}
+        {view === "contact" ? <ContactScreen /> : null}
+        {view === "login" ? <AuthScreen mode="login" onLoggedIn={handleLoggedIn} setView={setView} /> : null}
+        {view === "register" ? <AuthScreen mode="register" onLoggedIn={handleLoggedIn} setView={setView} /> : null}
+        {view === "onboarding" ? <OnboardingScreen setView={setView} /> : null}
+        {view === "resetPassword" ? <AuthScreen mode="resetPassword" onLoggedIn={handleLoggedIn} setView={setView} /> : null}
+        {view === "updatePassword" ? <AuthScreen mode="updatePassword" onLoggedIn={handleLoggedIn} setView={setView} /> : null}
+        {view === "terms" ? <PolicyScreen policy="terms" /> : null}
+        {view === "privacy" ? <PolicyScreen policy="privacy" /> : null}
+        {view === "refund" ? <PolicyScreen policy="refund" /> : null}
+        {view === "accessibility" ? <PolicyScreen policy="accessibility" /> : null}
+        {view === "waiver" ? <PolicyScreen policy="waiver" /> : null}
+        {view === "customer" ? <CustomerScreen onViewCityTrips={handleViewCityTrips} setSelectedTrip={setSelectedTrip} setView={setView} /> : null}
+        {view === "admin" ? <AdminScreen /> : null}
+        {view === "branch" ? <BranchScreen /> : null}
+        <SiteFooter activeView={view} onCityClick={handleOpenCityByName} setView={setView} />
+        <CookieBanner onPrivacyClick={() => setView("privacy")} />
+      </PricingProvider>
     </CurrencyProvider>
   );
 }

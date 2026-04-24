@@ -191,6 +191,126 @@ create table if not exists public.trips (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.archived_trips (
+  id uuid primary key,
+  city_id uuid,
+  slug text not null,
+  title text not null,
+  category text not null,
+  image_url text,
+  summary text,
+  meeting_point text,
+  start_date date not null,
+  end_date date,
+  duration text,
+  price_cents integer not null,
+  community_price_cents integer,
+  non_community_price_cents integer,
+  original_price_cents integer,
+  deposit_cents integer not null default 0,
+  capacity integer not null,
+  seats_remaining integer not null,
+  status public.trip_status not null,
+  featured boolean not null default false,
+  tags text[] not null default '{}'::text[],
+  published boolean not null default true,
+  pickup_points text[] not null default '{}'::text[],
+  is_special boolean not null default false,
+  special_collection_slug text,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  archived_at timestamptz not null default now()
+);
+
+create index if not exists archived_trips_start_date_idx on public.archived_trips(start_date desc);
+create index if not exists archived_trips_city_id_idx on public.archived_trips(city_id);
+create index if not exists archived_trips_archived_at_idx on public.archived_trips(archived_at desc);
+
+create or replace function public.archive_past_trips()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  archived_count integer := 0;
+begin
+  insert into public.archived_trips (
+    id,
+    city_id,
+    slug,
+    title,
+    category,
+    image_url,
+    summary,
+    meeting_point,
+    start_date,
+    end_date,
+    duration,
+    price_cents,
+    community_price_cents,
+    non_community_price_cents,
+    original_price_cents,
+    deposit_cents,
+    capacity,
+    seats_remaining,
+    status,
+    featured,
+    tags,
+    published,
+    pickup_points,
+    is_special,
+    special_collection_slug,
+    created_at,
+    updated_at,
+    archived_at
+  )
+  select
+    t.id,
+    t.city_id,
+    t.slug,
+    t.title,
+    t.category,
+    t.image_url,
+    t.summary,
+    t.meeting_point,
+    t.start_date,
+    t.end_date,
+    t.duration,
+    t.price_cents,
+    t.community_price_cents,
+    t.non_community_price_cents,
+    t.original_price_cents,
+    t.deposit_cents,
+    t.capacity,
+    t.seats_remaining,
+    t.status,
+    t.featured,
+    t.tags,
+    t.published,
+    t.pickup_points,
+    t.is_special,
+    t.special_collection_slug,
+    t.created_at,
+    t.updated_at,
+    now()
+  from public.trips t
+  where t.start_date < current_date
+    and not exists (
+      select 1
+      from public.archived_trips a
+      where a.id = t.id
+    );
+
+  get diagnostics archived_count = row_count;
+
+  delete from public.trips
+  where start_date < current_date;
+
+  return archived_count;
+end;
+$$;
+
 create index if not exists trips_city_id_idx on public.trips(city_id);
 create index if not exists trips_start_date_idx on public.trips(start_date);
 create index if not exists trips_status_idx on public.trips(status);
@@ -198,21 +318,71 @@ create index if not exists trips_status_idx on public.trips(status);
 alter table public.trips add column if not exists pickup_points text[] not null default '{}';
 alter table public.trips add column if not exists is_special boolean not null default false;
 alter table public.trips add column if not exists special_collection_slug text;
+alter table public.trips add column if not exists community_price_cents integer;
+alter table public.trips add column if not exists non_community_price_cents integer;
 alter table public.trips add column if not exists original_price_cents integer;
 create index if not exists trips_special_collection_slug_idx on public.trips(special_collection_slug);
+
+update public.trips
+set community_price_cents = price_cents
+where community_price_cents is null;
+
+update public.trips
+set non_community_price_cents = coalesce(original_price_cents, price_cents)
+where non_community_price_cents is null;
+
+alter table public.trips
+  drop constraint if exists trips_original_price_cents_check;
+
+alter table public.trips
+  add constraint trips_original_price_cents_check
+  check (
+    original_price_cents is null
+    or original_price_cents >= greatest(
+      coalesce(community_price_cents, price_cents),
+      coalesce(non_community_price_cents, price_cents)
+    )
+  );
 
 do $$
 begin
   if not exists (
     select 1
     from pg_constraint
-    where conname = 'trips_original_price_cents_check'
+    where conname = 'trips_community_price_cents_check'
   ) then
     alter table public.trips
-      add constraint trips_original_price_cents_check
+      add constraint trips_community_price_cents_check
       check (
-        original_price_cents is null
-        or original_price_cents >= price_cents
+        community_price_cents is null
+        or community_price_cents >= 0
+      );
+  end if;
+end
+$$;
+
+alter table public.trips
+  drop constraint if exists trips_non_community_vs_community_check;
+
+alter table public.trips
+  add constraint trips_non_community_vs_community_check
+  check (
+    non_community_price_cents is null
+    or non_community_price_cents >= coalesce(community_price_cents, price_cents)
+  );
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'trips_non_community_price_cents_check'
+  ) then
+    alter table public.trips
+      add constraint trips_non_community_price_cents_check
+      check (
+        non_community_price_cents is null
+        or non_community_price_cents >= 0
       );
   end if;
 end
@@ -359,6 +529,22 @@ create table if not exists public.reviews (
   published boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+create table if not exists public.activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor_id uuid references public.profiles(id) on delete set null,
+  actor_role text,
+  action text not null,
+  entity_type text not null,
+  entity_id uuid,
+  entity_label text,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists activity_logs_created_at_idx on public.activity_logs(created_at desc);
+create index if not exists activity_logs_actor_id_idx on public.activity_logs(actor_id);
+create index if not exists activity_logs_entity_type_idx on public.activity_logs(entity_type);
 
 create or replace function public.current_user_role()
 returns public.user_role
@@ -551,6 +737,7 @@ alter table public.partner_inquiries enable row level security;
 alter table public.contact_inquiries enable row level security;
 alter table public.updates enable row level security;
 alter table public.reviews enable row level security;
+alter table public.activity_logs enable row level security;
 
 drop policy if exists "profiles read own or staff" on public.profiles;
 create policy "profiles read own or staff"
@@ -750,6 +937,21 @@ on public.reviews for all
 to authenticated
 using (public.is_staff())
 with check (public.is_staff());
+
+drop policy if exists "activity logs staff insert own" on public.activity_logs;
+create policy "activity logs staff insert own"
+on public.activity_logs for insert
+to authenticated
+with check (
+  public.is_staff()
+  and actor_id = auth.uid()
+);
+
+drop policy if exists "activity logs admin read" on public.activity_logs;
+create policy "activity logs admin read"
+on public.activity_logs for select
+to authenticated
+using (public.is_admin());
 
 insert into public.cities (slug, name, province, image_url, tagline, support_email, support_phone)
 values

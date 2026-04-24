@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "../../lib/data";
 import { dbTripToTrip, tripSelect, type DbTrip } from "../../lib/db";
 import { friendlyError } from "../../lib/friendlyError";
+import { logActivity } from "../../lib/activityLog";
 import { supabase } from "../../lib/supabase";
 import type { Trip } from "../../lib/types";
 import { Button } from "../../shared/components/Button";
@@ -120,8 +121,9 @@ export function BranchScreen() {
     meeting_point: "",
     start_date: "",
     duration: "",
-    price: "",
-    original_price: "",
+    community_price: "",
+    non_community_price: "",
+    compare_price: "",
     deposit: "",
     capacity: "",
     seats_remaining: "",
@@ -278,8 +280,9 @@ export function BranchScreen() {
       meeting_point: "",
       start_date: "",
       duration: "",
-      price: "",
-      original_price: "",
+      community_price: "",
+      non_community_price: "",
+      compare_price: "",
       deposit: "",
       capacity: "",
       seats_remaining: "",
@@ -298,8 +301,9 @@ export function BranchScreen() {
 
     const title = tripForm.title.trim();
     const slug = (tripForm.slug.trim() || slugify(title)).trim();
-    const priceCents = Math.round(Number(tripForm.price) * 100);
-    const originalPriceCents = tripForm.original_price ? Math.round(Number(tripForm.original_price) * 100) : null;
+    const communityPriceCents = Math.round(Number(tripForm.community_price) * 100);
+    const nonCommunityPriceCents = Math.round(Number(tripForm.non_community_price) * 100);
+    const comparePriceCents = tripForm.compare_price ? Math.round(Number(tripForm.compare_price) * 100) : null;
     const depositCents = Math.round(Number(tripForm.deposit || "0") * 100);
     const capacity = Number.parseInt(tripForm.capacity, 10);
     const seatsRemaining = Number.parseInt(tripForm.seats_remaining || tripForm.capacity, 10);
@@ -310,13 +314,18 @@ export function BranchScreen() {
       return;
     }
 
-    if (!Number.isFinite(priceCents) || priceCents < 0 || !Number.isFinite(capacity) || capacity <= 0 || !Number.isFinite(seatsRemaining) || seatsRemaining < 0) {
-      setError("Trip price, capacity, and seats must be valid numbers.");
+    if (!Number.isFinite(communityPriceCents) || communityPriceCents < 0 || !Number.isFinite(nonCommunityPriceCents) || nonCommunityPriceCents < 0 || !Number.isFinite(capacity) || capacity <= 0 || !Number.isFinite(seatsRemaining) || seatsRemaining < 0) {
+      setError("Community price, non-community price, capacity, and seats must be valid numbers.");
       return;
     }
 
-    if (originalPriceCents !== null && (!Number.isFinite(originalPriceCents) || originalPriceCents < priceCents)) {
-      setError("Original price must be greater than or equal to the current price.");
+    if (nonCommunityPriceCents < communityPriceCents) {
+      setError("Non-community price must be greater than or equal to community price.");
+      return;
+    }
+
+    if (comparePriceCents !== null && (!Number.isFinite(comparePriceCents) || comparePriceCents < Math.max(communityPriceCents, nonCommunityPriceCents))) {
+      setError("Compare-at price must be greater than or equal to both live prices.");
       return;
     }
 
@@ -331,8 +340,10 @@ export function BranchScreen() {
       pickup_points: tripForm.meeting_point.trim() ? [tripForm.meeting_point.trim()] : [],
       start_date: tripForm.start_date,
       duration: tripForm.duration.trim() || null,
-      price_cents: priceCents,
-      original_price_cents: originalPriceCents,
+      price_cents: communityPriceCents,
+      community_price_cents: communityPriceCents,
+      non_community_price_cents: nonCommunityPriceCents,
+      original_price_cents: comparePriceCents,
       deposit_cents: depositCents,
       capacity,
       seats_remaining: Math.min(seatsRemaining, capacity),
@@ -347,6 +358,19 @@ export function BranchScreen() {
     if (insertError) {
       setError(friendlyError(insertError, "Could not add this trip. Please check the details and try again."));
     } else {
+      await logActivity({
+        action: "trip_created",
+        entityType: "trip",
+        entityLabel: title,
+        details: {
+          city_id: profile.branch_city_id,
+          category: tripForm.category.trim(),
+          start_date: tripForm.start_date,
+          community_price_cents: communityPriceCents,
+          non_community_price_cents: nonCommunityPriceCents,
+          original_price_cents: comparePriceCents,
+        },
+      });
       setShowTripModal(false);
       resetTripForm();
       await loadBranch();
@@ -387,6 +411,18 @@ export function BranchScreen() {
       if (bookingError) {
         setError(friendlyError(bookingError, "Could not update this booking. Please try again."));
       } else {
+        await logActivity({
+          action: "payment_proof_rejected",
+          entityType: "payment_proof",
+          entityId: proof.id,
+          entityLabel: proof.bookings?.booking_ref ?? proof.file_name ?? proof.id,
+          details: {
+            booking_id: proof.booking_id,
+            booking_ref: proof.bookings?.booking_ref ?? null,
+            amount_cents: proof.amount_cents,
+            approved,
+          },
+        });
         await loadBranch();
       }
       setSaving("");
@@ -431,6 +467,19 @@ export function BranchScreen() {
     if (bookingError) {
       setError(friendlyError(bookingError, "Could not update this booking. Please try again."));
     } else {
+      await logActivity({
+        action: "payment_proof_approved",
+        entityType: "payment_proof",
+        entityId: proof.id,
+        entityLabel: proof.bookings?.booking_ref ?? proof.file_name ?? proof.id,
+        details: {
+          booking_id: proof.booking_id,
+          booking_ref: proof.bookings?.booking_ref ?? null,
+          amount_cents: proof.amount_cents,
+          next_paid_cents: nextPaid,
+          booking_status: nextStatus,
+        },
+      });
       await loadBranch();
     }
     setSaving("");
@@ -465,6 +514,17 @@ export function BranchScreen() {
     if (reviewError) {
       setError(friendlyError(reviewError, "Could not update this review right now. Please try again."));
     } else {
+      await logActivity({
+        action: published ? "review_published" : "review_hidden",
+        entityType: "review",
+        entityId: review.id,
+        entityLabel: review.author_name,
+        details: {
+          published,
+          trip_title: review.trips?.title ?? null,
+          rating: review.rating,
+        },
+      });
       await loadBranch();
     }
     setSaving("");
@@ -707,6 +767,10 @@ export function BranchScreen() {
             </div>
 
             <div className="branch-modal-grid">
+              <div className="branch-pricing-note branch-modal-full">
+                <strong>Pricing setup</strong>
+                <p>Community price is for returning travelers with 1 or more previous bookings. Non-community price is for first-time or guest bookings. Compare-at / original price is optional and only used when you want a crossed-out promo price above the live selling prices.</p>
+              </div>
               <label className="branch-modal-full">
                 Branch city
                 <input value={profile?.cities?.name ?? ""} readOnly />
@@ -736,12 +800,19 @@ export function BranchScreen() {
                 <input value={tripForm.meeting_point} onChange={(event) => setTripFormValue("meeting_point", event.target.value)} placeholder="Main university pickup" />
               </label>
               <label>
-                Price
-                <input type="number" min="0" step="0.01" value={tripForm.price} onChange={(event) => setTripFormValue("price", event.target.value)} placeholder="3499" />
+                Community price
+                <input type="number" min="0" step="0.01" value={tripForm.community_price} onChange={(event) => setTripFormValue("community_price", event.target.value)} placeholder="3499" />
+                <span className="branch-field-note">Used for returning travelers.</span>
               </label>
               <label>
-                Original price
-                <input type="number" min="0" step="0.01" value={tripForm.original_price} onChange={(event) => setTripFormValue("original_price", event.target.value)} placeholder="3999" />
+                Non-community price
+                <input type="number" min="0" step="0.01" value={tripForm.non_community_price} onChange={(event) => setTripFormValue("non_community_price", event.target.value)} placeholder="3999" />
+                <span className="branch-field-note">Shown to guests and first-time bookers.</span>
+              </label>
+              <label>
+                Compare-at / original price
+                <input type="number" min="0" step="0.01" value={tripForm.compare_price} onChange={(event) => setTripFormValue("compare_price", event.target.value)} placeholder="4299" />
+                <span className="branch-field-note">Optional crossed-out promo price.</span>
               </label>
               <label>
                 Deposit

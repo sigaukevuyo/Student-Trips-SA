@@ -1,5 +1,13 @@
 import type { Trip } from "./types";
 
+export function getTodayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function isUpcomingTripDate(startDate: string) {
+  return startDate >= getTodayIsoDate();
+}
+
 export type DbCity = {
   id: string;
   slug: string;
@@ -24,6 +32,8 @@ export type DbTrip = {
   start_date: string;
   duration: string | null;
   price_cents: number;
+  community_price_cents: number | null;
+  non_community_price_cents: number | null;
   original_price_cents: number | null;
   deposit_cents: number;
   seats_remaining: number;
@@ -59,6 +69,8 @@ export function dbTripToTrip(trip: DbTrip): Trip {
     startDate: trip.start_date,
     duration: trip.duration ?? "",
     price: trip.price_cents,
+    communityPrice: trip.community_price_cents ?? trip.price_cents,
+    nonCommunityPrice: trip.non_community_price_cents ?? trip.original_price_cents ?? trip.price_cents,
     originalPrice: trip.original_price_cents,
     deposit: trip.deposit_cents,
     seatsRemaining: trip.seats_remaining,
@@ -75,4 +87,4 @@ export function dbTripToTrip(trip: DbTrip): Trip {
 }
 
 export const tripSelect =
-  "id,slug,title,category,image_url,summary,meeting_point,pickup_points,start_date,duration,price_cents,original_price_cents,deposit_cents,seats_remaining,capacity,status,is_special,special_collection_slug,featured,tags,cities(name)";
+  "id,slug,title,category,image_url,summary,meeting_point,pickup_points,start_date,duration,price_cents,community_price_cents,non_community_price_cents,original_price_cents,deposit_cents,seats_remaining,capacity,status,is_special,special_collection_slug,featured,tags,cities(name)";

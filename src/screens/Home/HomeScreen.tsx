@@ -1,10 +1,11 @@
 import { CalendarCheck, Globe2, MapPin, Search, ShieldCheck, Sparkles, Star, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { dbTripToTrip, tripSelect, type DbCity, type DbTrip } from "../../lib/db";
+import { dbTripToTrip, getTodayIsoDate, tripSelect, type DbCity, type DbTrip } from "../../lib/db";
 import { useCurrency } from "../../lib/currency";
 import { formatDate } from "../../lib/data";
 import { friendlyError } from "../../lib/friendlyError";
+import { usePricing } from "../../lib/pricing";
 import { supabase } from "../../lib/supabase";
 import { getTripBadges } from "../../lib/tripBadges";
 import type { Trip } from "../../lib/types";
@@ -57,6 +58,7 @@ export function HomeScreen({
   setView: (view: View) => void;
 }) {
   const { formatTripMoney, priceNotice } = useCurrency();
+  const { resolveTripPricing } = usePricing();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchCity, setSearchCity] = useState("");
   const [searchCategory, setSearchCategory] = useState("");
@@ -79,7 +81,7 @@ export function HomeScreen({
 
       const [cityResult, tripResult, reviewResult, updateResult] = await Promise.all([
         supabase.from("cities").select("id,slug,name,province,image_url,tagline,support_email,support_phone,trips(count)").eq("active", true).order("name").limit(6),
-        supabase.from("trips").select(tripSelect).eq("published", true).order("created_at", { ascending: false }).limit(3),
+        supabase.from("trips").select(tripSelect).eq("published", true).gte("start_date", getTodayIsoDate()).order("created_at", { ascending: false }).limit(3),
         supabase.from("reviews").select("id,quote,author_name,rating").eq("published", true).order("created_at", { ascending: false }).limit(6),
         supabase.from("updates").select("id,title,body,banner_special_collection_slug").eq("published", true).order("published_on", { ascending: false }).limit(1).maybeSingle(),
       ]);
@@ -212,8 +214,10 @@ export function HomeScreen({
         {featuredTrips.length === 0 && !loading ? <div className="app-empty-state"><h2>New departures are coming soon</h2><p>Check back shortly for featured student trips and weekend escapes.</p></div> : null}
 
         <div className="home-featured-grid">
-          {featuredTrips.map((trip) => (
-            <article className="home-trip-card" key={trip.id}>
+          {featuredTrips.map((trip) => {
+            const pricing = resolveTripPricing(trip);
+            return (
+              <article className="home-trip-card" key={trip.id}>
               <div className="home-trip-art">
                 {trip.image ? <img src={trip.image} alt={`${trip.title} destination`} /> : null}
                 <div className="home-trip-badges">
@@ -239,10 +243,10 @@ export function HomeScreen({
                   <span>{formatDate(trip.startDate)}</span>
                   <span>{trip.seatsRemaining} seats left</span>
                   <strong className="home-trip-price-stack">
-                    {trip.originalPrice && trip.originalPrice > trip.price ? <span>{formatTripMoney(trip.originalPrice)}</span> : null}
-                    <em>From {formatTripMoney(trip.price)}</em>
+                    {pricing.comparePrice ? <span>{formatTripMoney(pricing.comparePrice)}</span> : null}
+                    <em>From {formatTripMoney(pricing.price)}</em>
                   </strong>
-                  <strong>Deposit {formatTripMoney(trip.deposit)}</strong>
+                  <strong>Deposit {formatTripMoney(pricing.deposit)}</strong>
                 </div>
                 <p className="home-trip-currency">{priceNotice}</p>
                 <div className="home-trip-actions">
@@ -253,8 +257,9 @@ export function HomeScreen({
                   <button type="button" onClick={() => onViewCityTrips(trip)}>See city trips</button>
                 </div>
               </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
 
