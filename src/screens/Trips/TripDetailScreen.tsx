@@ -138,14 +138,6 @@ export function TripDetailScreen({ trip, isLoggedIn, setView }: { trip: Trip | n
               <div><dt>Deposit option</dt><dd>{formatTripMoney(pricing.deposit)}</dd></div>
               <div><dt>Seats remaining</dt><dd>{trip.seatsRemaining}</dd></div>
             </dl>
-            <label>
-              Choose pickup point
-              <select defaultValue={pickupPoints[0]}>
-                {pickupPoints.map((point) => (
-                  <option key={point} value={point}>{point}</option>
-                ))}
-              </select>
-            </label>
             <button type="button" disabled={soldOut} onClick={() => setView(isLoggedIn ? "booking" : "login")}>{soldOut ? "Sold Out" : "Book Now"}</button>
             <p>{priceNotice}</p>
           </section>
