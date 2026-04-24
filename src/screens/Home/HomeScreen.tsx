@@ -232,7 +232,7 @@ export function HomeScreen({
                     {trip.status === "SOLD_OUT" || trip.status === "NEARLY_FULL" ? (
                       <span className="home-trip-status">{trip.status === "SOLD_OUT" ? "Sold Out" : "Nearly Full"}</span>
                     ) : null}
-                    <strong>{trip.category}</strong>
+                    <strong className="home-trip-category">{trip.category}</strong>
                   </div>
                 </div>
               </div>

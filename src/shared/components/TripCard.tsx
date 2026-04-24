@@ -127,7 +127,7 @@ export function TripCard({
         </div>
         <div className="trip-image-copy">
           {soldOut || nearlyFull ? <span className="trip-status-pill">{soldOut ? "Sold Out" : "Nearly Full"}</span> : null}
-          <strong>{trip.category}</strong>
+          <strong className="trip-image-category">{trip.category}</strong>
         </div>
       </div>
 

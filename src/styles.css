@@ -521,6 +521,19 @@ select {
   font-weight: 900;
 }
 
+.trip-image-category {
+  display: inline-block !important;
+  max-width: none;
+  padding: 5px 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #071a2b !important;
+  font-size: 11px !important;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
 .trip-content {
   display: grid;
   gap: 12px;
