@@ -1828,6 +1828,8 @@ export function AdminScreen() {
                   <strong>{review.trips?.title ?? "General review"}</strong>
                   <StatusBadge status={review.published ? "Published" : "Pending"} />
                   <div className="admin-actions">
+                    {!review.published ? <Button variant="secondary" onClick={() => updateRecord("reviews", review.id, { published: true })}>Approve</Button> : null}
+                    {review.published ? <Button variant="ghost" onClick={() => updateRecord("reviews", review.id, { published: false })}>Hide</Button> : null}
                     <Button variant="secondary" onClick={() => openReviewForm(review)}>Edit</Button>
                     <Button variant="ghost" onClick={() => deleteRecord("reviews", review.id, review.author_name)}>Delete</Button>
                   </div>

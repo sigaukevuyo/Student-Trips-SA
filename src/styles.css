@@ -1159,6 +1159,77 @@ select {
   text-align: left;
 }
 
+.cookie-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 85;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: min(980px, calc(100vw - 48px));
+  border: 1px solid #d5dde6;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 20px 48px rgba(7, 26, 43, 0.2);
+  padding: 16px 18px;
+  backdrop-filter: blur(14px);
+  transform: translateX(-50%);
+}
+
+.cookie-banner-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.cookie-banner-copy strong {
+  color: var(--primary);
+  font-size: 15px;
+}
+
+.cookie-banner-copy p {
+  margin: 0;
+  color: #44546a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cookie-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cookie-primary-button,
+.cookie-secondary-button,
+.cookie-link-button {
+  min-height: 38px;
+  border-radius: 999px;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.cookie-primary-button {
+  border: 0;
+  background: var(--accent);
+  color: var(--primary);
+}
+
+.cookie-secondary-button {
+  border: 1px solid #d7e0ea;
+  background: white;
+  color: var(--primary);
+}
+
+.cookie-link-button {
+  border: 0;
+  background: transparent;
+  color: #39485c;
+}
+
 .floating-chat-button {
   position: fixed;
   right: 32px;
@@ -1242,6 +1313,10 @@ select {
     text-align: left;
   }
 
+  .cookie-banner-actions {
+    justify-content: flex-start;
+  }
+
   .footer-cta {
     align-items: flex-start;
     flex-direction: column;
@@ -1279,5 +1354,26 @@ select {
     min-height: 50px;
     padding-inline: 20px;
     font-size: 15px;
+  }
+
+  .cookie-banner {
+    left: 12px;
+    right: 12px;
+    bottom: 78px;
+    width: auto;
+    padding: 14px;
+    transform: none;
+  }
+
+  .cookie-banner-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .cookie-primary-button,
+  .cookie-secondary-button,
+  .cookie-link-button {
+    width: 100%;
+    justify-content: center;
   }
 }

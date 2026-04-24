@@ -21,7 +21,7 @@ import { CurrencyProvider } from "./lib/currency";
 import { dbTripToTrip, tripSelect, type DbTrip } from "./lib/db";
 import { supabase } from "./lib/supabase";
 import type { Trip } from "./lib/types";
-import { FloatingChatButton } from "./shared/components/FloatingChatButton";
+import { CookieBanner } from "./shared/components/CookieBanner";
 import { AppHeader } from "./shared/layout/AppHeader";
 import { SiteFooter } from "./shared/layout/SiteFooter";
 import type { View } from "./shared/navigation";
@@ -525,7 +525,7 @@ export function App() {
       {view === "admin" ? <AdminScreen /> : null}
       {view === "branch" ? <BranchScreen /> : null}
       <SiteFooter activeView={view} onCityClick={handleOpenCityByName} setView={setView} />
-      <FloatingChatButton />
+      <CookieBanner onPrivacyClick={() => setView("privacy")} />
     </CurrencyProvider>
   );
 }

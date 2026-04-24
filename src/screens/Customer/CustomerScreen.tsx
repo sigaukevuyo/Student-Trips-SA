@@ -1,4 +1,4 @@
-import { CalendarDays, CheckCircle2, ChevronRight, HelpCircle, LockKeyhole, Mail, MapPin, Settings, ShieldCheck, Ticket, Trash2, UserRound, Wallet, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronRight, HelpCircle, LockKeyhole, Mail, MapPin, Settings, ShieldCheck, Star, Ticket, Trash2, UserRound, Wallet, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useCurrency } from "../../lib/currency";
@@ -54,7 +54,18 @@ type SavedTripRow = {
   trips: DbTrip | null;
 };
 
-const customerTabs = ["Overview", "Bookings", "Saved Trips", "Payments", "Profile", "Settings"];
+type CustomerReview = {
+  id: string;
+  trip_id: string | null;
+  author_name: string;
+  rating: number;
+  quote: string;
+  published: boolean;
+  created_at: string;
+  trips: { title: string | null } | null;
+};
+
+const customerTabs = ["Overview", "Bookings", "Saved Trips", "Payments", "Reviews", "Profile", "Settings"];
 const cancellableStatuses = new Set(["Pending Payment", "Awaiting Proof", "Waitlisted", "Confirmed"]);
 const payableStatuses = new Set(["Pending Payment", "Awaiting Proof"]);
 const activeBookingStatuses = new Set(["Pending Payment", "Awaiting Proof", "Waitlisted", "Confirmed"]);
@@ -98,10 +109,20 @@ export function CustomerScreen({
   const [bookings, setBookings] = useState<DashboardBooking[]>([]);
   const [savedTrips, setSavedTrips] = useState<Trip[]>([]);
   const [recommendedTrips, setRecommendedTrips] = useState<Trip[]>([]);
+  const [reviewableTrips, setReviewableTrips] = useState<Trip[]>([]);
+  const [reviews, setReviews] = useState<CustomerReview[]>([]);
+  const [reviewForm, setReviewForm] = useState({
+    trip_id: "",
+    rating: "5",
+    quote: "",
+  });
+  const [reviewMessage, setReviewMessage] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
   const [settingsLoading, setSettingsLoading] = useState("");
+  const [showMoreSecurityActions, setShowMoreSecurityActions] = useState(false);
   const [pendingCancel, setPendingCancel] = useState<DashboardBooking | null>(null);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
   const [bookingActionMessage, setBookingActionMessage] = useState("");
@@ -139,7 +160,7 @@ export function CustomerScreen({
         return;
       }
 
-      const [profileResult, bookingsResult, savedTripsResult, tripsResult] = await Promise.all([
+      const [profileResult, bookingsResult, savedTripsResult, tripsResult, reviewsResult] = await Promise.all([
         supabase
           .from("profiles")
           .select("first_name,last_name,email,phone,campus,date_of_birth,id_passport_number,student_number,emergency_contact_name,emergency_contact_phone,dietary_requirements,medical_notes,profile_complete_percent")
@@ -161,14 +182,15 @@ export function CustomerScreen({
           .order("created_at", { ascending: false })
           .limit(4),
         supabase.from("trips").select(tripSelect).eq("published", true).order("start_date").limit(4),
+        supabase.from("reviews").select("id,trip_id,author_name,rating,quote,published,created_at,trips(title)").eq("user_id", user.id).order("created_at", { ascending: false }),
       ]);
 
       if (!mounted) {
         return;
       }
 
-      if (profileResult.error || bookingsResult.error || savedTripsResult.error || tripsResult.error) {
-        setError(friendlyError(profileResult.error ?? bookingsResult.error ?? savedTripsResult.error ?? tripsResult.error, "Could not load dashboard."));
+      if (profileResult.error || bookingsResult.error || savedTripsResult.error || tripsResult.error || reviewsResult.error) {
+        setError(friendlyError(profileResult.error ?? bookingsResult.error ?? savedTripsResult.error ?? tripsResult.error ?? reviewsResult.error, "Could not load dashboard."));
       }
 
       setProfile(
@@ -203,6 +225,16 @@ export function CustomerScreen({
         }));
 
       setBookings(mappedBookings);
+      setReviewableTrips(
+        Array.from(
+          new Map(
+            (((bookingsResult.data as unknown as DbBooking[] | null) ?? [])
+              .map((booking) => booking.trips)
+              .filter((trip): trip is DbTrip => Boolean(trip))
+              .map((trip) => [trip.id, dbTripToTrip(trip)])),
+          ).values(),
+        ),
+      );
 
       const mappedSavedTrips = ((savedTripsResult.data as unknown as SavedTripRow[] | null) ?? [])
         .map((row) => row.trips)
@@ -211,6 +243,7 @@ export function CustomerScreen({
 
       setSavedTrips(mappedSavedTrips);
       setRecommendedTrips(((tripsResult.data as unknown as DbTrip[] | null) ?? []).map(dbTripToTrip));
+      setReviews((reviewsResult.data as CustomerReview[] | null) ?? []);
       setLoading(false);
     }
 
@@ -279,6 +312,61 @@ export function CustomerScreen({
     setView("tripDetail");
   };
 
+  async function submitReview() {
+    setReviewMessage("");
+
+    if (!supabase || reviewLoading) return;
+
+    const quote = reviewForm.quote.trim();
+    const rating = Number.parseInt(reviewForm.rating, 10);
+
+    if (!quote) {
+      setReviewMessage("Please write a short review before submitting.");
+      return;
+    }
+
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      setReviewMessage("Please choose a rating between 1 and 5.");
+      return;
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setReviewMessage("Please log in again before leaving a review.");
+      setView("login");
+      return;
+    }
+
+    setReviewLoading(true);
+    const authorName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || profile?.email?.split("@")[0] || "Traveler";
+    const { error: insertError } = await supabase.from("reviews").insert({
+      user_id: user.id,
+      trip_id: reviewForm.trip_id || null,
+      author_name: authorName,
+      rating,
+      quote,
+      published: false,
+    });
+    setReviewLoading(false);
+
+    if (insertError) {
+      setReviewMessage(friendlyError(insertError, "Could not submit your review right now. Please try again."));
+      return;
+    }
+
+    setReviewForm({
+      trip_id: "",
+      rating: "5",
+      quote: "",
+    });
+    setReviewMessage("Review submitted. It will appear on the site once approved.");
+    setReloadToken((current) => current + 1);
+  }
+
   const confirmCancelBooking = async () => {
     if (!supabase || !pendingCancel) return;
 
@@ -326,7 +414,18 @@ export function CustomerScreen({
     setSettingsLoading("signout");
 
     if (supabase) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
+    }
+
+    setSettingsLoading("");
+    setView("home");
+  };
+
+  const signOutFromAllDevices = async () => {
+    setSettingsLoading("signout-all");
+
+    if (supabase) {
+      await supabase.auth.signOut({ scope: "global" });
     }
 
     setSettingsLoading("");
@@ -620,6 +719,90 @@ export function CustomerScreen({
               </section>
             ) : null}
 
+            {activeTab === "Reviews" ? (
+              <section className="customer-reviews-layout">
+                <article className="card customer-review-form-card">
+                  <div className="card-head">
+                    <div>
+                      <h2>Leave a review</h2>
+                      <p>Share your trip experience. Reviews are approved before they appear on the site.</p>
+                    </div>
+                    <Star size={20} />
+                  </div>
+                  {reviewableTrips.length === 0 ? (
+                    <div className="customer-empty-inline clean">
+                      <strong>No trips to review yet</strong>
+                      <span>Your booked trips will show here once you have travel history in your account.</span>
+                    </div>
+                  ) : (
+                    <div className="customer-review-form">
+                      <label>
+                        Trip
+                        <select value={reviewForm.trip_id} onChange={(event) => setReviewForm((current) => ({ ...current, trip_id: event.target.value }))}>
+                          <option value="">General review</option>
+                          {reviewableTrips.map((trip) => (
+                            <option key={trip.id} value={trip.id}>{trip.title}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Rating
+                        <select value={reviewForm.rating} onChange={(event) => setReviewForm((current) => ({ ...current, rating: event.target.value }))}>
+                          <option value="5">5 stars</option>
+                          <option value="4">4 stars</option>
+                          <option value="3">3 stars</option>
+                          <option value="2">2 stars</option>
+                          <option value="1">1 star</option>
+                        </select>
+                      </label>
+                      <label className="customer-review-form-full">
+                        Your review
+                        <textarea
+                          value={reviewForm.quote}
+                          onChange={(event) => setReviewForm((current) => ({ ...current, quote: event.target.value }))}
+                          rows={5}
+                          placeholder="Tell other travelers what stood out about your trip."
+                        />
+                      </label>
+                      <div className="customer-review-form-actions">
+                        <Button onClick={submitReview} disabled={reviewLoading}>{reviewLoading ? "Submitting..." : "Submit Review"}</Button>
+                      </div>
+                    </div>
+                  )}
+                  {reviewMessage ? <p className="auth-message">{reviewMessage}</p> : null}
+                </article>
+
+                <article className="card customer-review-history-card">
+                  <div className="card-head">
+                    <div>
+                      <h2>Your reviews</h2>
+                      <p>Track submitted reviews and whether they are live on the site yet.</p>
+                    </div>
+                    <Star size={20} />
+                  </div>
+                  <div className="customer-review-history">
+                    {reviews.length === 0 ? (
+                      <div className="customer-empty-inline clean">
+                        <strong>No reviews yet</strong>
+                        <span>Once you submit a review, it will appear here with its approval status.</span>
+                      </div>
+                    ) : (
+                      reviews.map((review) => (
+                        <article key={review.id} className="customer-review-row">
+                          <div>
+                            <strong>{review.trips?.title ?? "General review"}</strong>
+                            <span>{review.rating}/5 stars - {formatDate(review.created_at)}</span>
+                          </div>
+                          <p>{review.quote}</p>
+                          <StatusBadge status={review.published ? "Published" : "Pending"} />
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </article>
+              </section>
+            ) : null}
+
             {activeTab === "Profile" ? (
               <section className="card customer-profile-review">
                 <div className="customer-profile-review-head">
@@ -701,10 +884,20 @@ export function CustomerScreen({
                         <Settings size={18} />
                         <span>{settingsLoading === "signout" ? "Signing out" : "Sign out of this device"}</span>
                       </button>
-                      <button className="danger" type="button" onClick={() => setConfirmDeleteAccount(true)} disabled={settingsLoading === "delete-account"}>
-                        <Trash2 size={18} />
-                        <span>Delete account</span>
+                      <button type="button" onClick={signOutFromAllDevices} disabled={settingsLoading === "signout-all"}>
+                        <ShieldCheck size={18} />
+                        <span>{settingsLoading === "signout-all" ? "Signing out everywhere" : "Sign out of all devices"}</span>
                       </button>
+                      <button type="button" onClick={() => setShowMoreSecurityActions((current) => !current)}>
+                        <Settings size={18} />
+                        <span>{showMoreSecurityActions ? "Hide more actions" : "More"}</span>
+                      </button>
+                      {showMoreSecurityActions ? (
+                        <button className="danger" type="button" onClick={() => setConfirmDeleteAccount(true)} disabled={settingsLoading === "delete-account"}>
+                          <Trash2 size={18} />
+                          <span>Delete account</span>
+                        </button>
+                      ) : null}
                     </div>
                   </article>
 

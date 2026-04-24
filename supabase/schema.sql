@@ -732,6 +732,12 @@ on public.reviews for select
 to anon, authenticated
 using (published = true or public.is_staff());
 
+drop policy if exists "reviews users read own" on public.reviews;
+create policy "reviews users read own"
+on public.reviews for select
+to authenticated
+using (user_id = auth.uid());
+
 drop policy if exists "reviews authenticated create" on public.reviews;
 create policy "reviews authenticated create"
 on public.reviews for insert

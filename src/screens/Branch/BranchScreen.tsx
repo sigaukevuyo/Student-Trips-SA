@@ -75,7 +75,17 @@ type BranchCustomer = {
   phone: string | null;
 };
 
-const branchTabs = ["Overview", "Trips", "Bookings", "Customers", "Payments", "Reports"];
+type BranchReview = {
+  id: string;
+  author_name: string;
+  rating: number;
+  quote: string;
+  published: boolean;
+  created_at: string;
+  trips: { title: string | null } | null;
+};
+
+const branchTabs = ["Overview", "Trips", "Bookings", "Customers", "Payments", "Reviews", "Reports"];
 
 function personName(profile: Pick<BranchProfile, "first_name" | "last_name" | "email"> | null) {
   const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim();
@@ -98,6 +108,7 @@ export function BranchScreen() {
   const [proofs, setProofs] = useState<BranchProof[]>([]);
   const [inquiries, setInquiries] = useState<BranchInquiry[]>([]);
   const [customers, setCustomers] = useState<BranchCustomer[]>([]);
+  const [reviews, setReviews] = useState<BranchReview[]>([]);
   const [activeTab, setActiveTab] = useState(branchTabs[0]);
   const [showTripModal, setShowTripModal] = useState(false);
   const [saving, setSaving] = useState("");
@@ -171,7 +182,7 @@ export function BranchScreen() {
       const cityId = branchProfile.branch_city_id;
       const cityName = branchProfile.cities?.name ?? "";
 
-      const [tripResult, bookingResult, paymentResult, proofResult, inquiryResult] = await Promise.all([
+      const [tripResult, bookingResult, paymentResult, proofResult, inquiryResult, reviewResult] = await Promise.all([
         supabase.from("trips").select(tripSelect).eq("city_id", cityId).order("start_date").limit(50),
         supabase
           .from("bookings")
@@ -197,11 +208,17 @@ export function BranchScreen() {
           .ilike("preferred_city", cityName)
           .order("created_at", { ascending: false })
           .limit(50),
+        supabase
+          .from("reviews")
+          .select("id,author_name,rating,quote,published,created_at,trips!inner(title,city_id)")
+          .eq("trips.city_id", cityId)
+          .order("created_at", { ascending: false })
+          .limit(100),
       ]);
 
       if (!mounted) return;
 
-      const firstError = tripResult.error ?? bookingResult.error ?? paymentResult.error ?? proofResult.error ?? inquiryResult.error;
+      const firstError = tripResult.error ?? bookingResult.error ?? paymentResult.error ?? proofResult.error ?? inquiryResult.error ?? reviewResult.error;
       if (firstError) {
         setError(friendlyError(firstError, "We could not load branch data right now. Please try again."));
       }
@@ -211,6 +228,7 @@ export function BranchScreen() {
       setPayments((paymentResult.data as unknown as BranchPayment[] | null) ?? []);
       setProofs((proofResult.data as unknown as BranchProof[] | null) ?? []);
       setInquiries((inquiryResult.data as BranchInquiry[] | null) ?? []);
+      setReviews((reviewResult.data as unknown as BranchReview[] | null) ?? []);
 
       const userIds = Array.from(new Set(((bookingResult.data as unknown as BranchBooking[] | null) ?? []).map((booking) => booking.user_id)));
       if (userIds.length > 0) {
@@ -437,6 +455,21 @@ export function BranchScreen() {
     setSaving("");
   }
 
+  async function setReviewPublished(review: BranchReview, published: boolean) {
+    if (!supabase) return;
+
+    setSaving(`review-${review.id}`);
+    setError("");
+    const { error: reviewError } = await supabase.from("reviews").update({ published }).eq("id", review.id);
+
+    if (reviewError) {
+      setError(friendlyError(reviewError, "Could not update this review right now. Please try again."));
+    } else {
+      await loadBranch();
+    }
+    setSaving("");
+  }
+
   const paid = useMemo(() => payments.filter((payment) => payment.status === "Paid").reduce((sum, payment) => sum + payment.amount_cents, 0), [payments]);
   const outstanding = useMemo(() => bookings.reduce((sum, booking) => sum + booking.outstanding_cents, 0), [bookings]);
   const pendingProofs = useMemo(() => proofs.filter((proof) => proof.approved === null).length, [proofs]);
@@ -620,6 +653,31 @@ export function BranchScreen() {
                 <div><strong>{payment.bookings?.booking_ref ?? "Payment"}</strong><span>{payment.bookings?.trips?.title ?? payment.method}</span></div>
                 <div><strong>{formatMoney(payment.amount_cents)}</strong><span>{formatDate(payment.created_at)}</span></div>
                 <StatusBadge status={payment.status} />
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {!loading && !error && activeTab === "Reviews" ? (
+        <section className="card">
+          <div className="card-head"><h3>Reviews</h3><MessageSquare size={20} /></div>
+          <div className="branch-review-list">
+            {reviews.length === 0 ? <div className="app-empty-state"><p>No customer reviews for this branch yet.</p></div> : null}
+            {reviews.map((review) => (
+              <article key={review.id} className="branch-review-row">
+                <div className="branch-review-head">
+                  <div>
+                    <strong>{review.author_name}</strong>
+                    <span>{review.trips?.title ?? "General review"} - {review.rating}/5 stars</span>
+                  </div>
+                  <StatusBadge status={review.published ? "Published" : "Pending"} />
+                </div>
+                <p>{review.quote}</p>
+                <div className="branch-proof-actions">
+                  <Button variant="secondary" onClick={() => setReviewPublished(review, true)} disabled={review.published || saving === `review-${review.id}`}>Approve</Button>
+                  <Button variant="ghost" onClick={() => setReviewPublished(review, false)} disabled={!review.published || saving === `review-${review.id}`}>Hide</Button>
+                </div>
               </article>
             ))}
           </div>

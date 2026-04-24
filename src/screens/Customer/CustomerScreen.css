@@ -747,9 +747,105 @@
   font-size: 12px;
 }
 
+.customer-reviews-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
+}
+
+.customer-review-form-card,
+.customer-review-history-card {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.customer-review-form .button,
+.customer-review-history-card .status {
+  width: max-content;
+}
+
+.customer-review-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.customer-review-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.customer-review-form select,
+.customer-review-form textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fbfcfd;
+  color: var(--primary);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.customer-review-form select {
+  min-height: 42px;
+  font-weight: 700;
+}
+
+.customer-review-form textarea {
+  min-height: 124px;
+  resize: vertical;
+}
+
+.customer-review-form-full {
+  grid-column: 1 / -1;
+}
+
+.customer-review-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  grid-column: 1 / -1;
+}
+
+.customer-review-history {
+  display: grid;
+  gap: 12px;
+}
+
+.customer-review-row {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fbfcfd;
+  padding: 16px;
+}
+
+.customer-review-row > div {
+  display: grid;
+  gap: 4px;
+}
+
+.customer-review-row strong {
+  color: var(--primary);
+  font-size: 15px;
+}
+
+.customer-review-row span,
+.customer-review-row p {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 @media (max-width: 980px) {
   .customer-overview-hero,
   .customer-overview-grid,
+  .customer-reviews-layout,
   .customer-profile-review-grid,
   .customer-settings-grid,
   .customer-settings-shortcuts,
@@ -761,6 +857,10 @@
   .customer-booking-row {
     grid-template-columns: 150px minmax(0, 1fr);
     gap: 18px;
+  }
+
+  .customer-review-form {
+    grid-template-columns: 1fr;
   }
 
   .customer-booking-status,
